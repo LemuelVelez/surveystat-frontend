@@ -29,17 +29,14 @@ import {
 const features = [
   {
     title: "Survey Collection",
-    description: "Collect consent and Likert-scale checklist answers through guided survey steps.",
     icon: ClipboardCheck,
   },
   {
     title: "Real-time Statistics",
-    description: "Review weighted means, interpretation ranges, distributions, and response counts from actual submissions.",
     icon: BarChart3,
   },
   {
     title: "Interactive Tables",
-    description: "Inspect survey sections and item-level statistics through connected data tables.",
     icon: DatabaseZap,
   },
 ]
@@ -100,7 +97,7 @@ function getDefaultSections(stepNumber: number): CreateSurveyFormPayload["sectio
 
 type DialogShellProps = {
   title: string
-  description: string
+  description?: string
   children: ReactNode
   footer?: ReactNode
   onClose: () => void
@@ -113,7 +110,7 @@ function DialogShell({ title, description, children, footer, onClose }: DialogSh
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-white/10 bg-slate-950/95 px-6 py-5 backdrop-blur">
           <div>
             <h2 className="text-2xl font-black tracking-tight">{title}</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">{description}</p>
+            {description ? <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">{description}</p> : null}
           </div>
           <button
             type="button"
@@ -152,6 +149,7 @@ export function Landing() {
   const [surveyStepCount, setSurveyStepCount] = useState(2)
   const [respondentInformationRequired, setRespondentInformationRequired] = useState(true)
   const [isCreatingSurvey, setIsCreatingSurvey] = useState(false)
+  const [updatingRespondentInfoFormId, setUpdatingRespondentInfoFormId] = useState<string | null>(null)
 
   async function loadLandingData() {
     setIsLoading(true)
@@ -238,6 +236,24 @@ export function Landing() {
 
       return [...current, formCode]
     })
+  }
+
+  async function toggleExistingSurveyRespondentInformation(form: SurveyForm) {
+    const nextRequired = !form.respondentInformationRequired
+    setUpdatingRespondentInfoFormId(form.id)
+
+    try {
+      const updatedForm = await surveyStatService.updateSurveyFormRespondentInformation(form.id, {
+        respondentInformationRequired: nextRequired,
+      })
+
+      setForms((current) => current.map((item) => (item.id === updatedForm.id ? updatedForm : item)))
+      toast.success(nextRequired ? "Respondent information is required." : "Respondent information is turned off.")
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setUpdatingRespondentInfoFormId(null)
+    }
   }
 
   function startSelectedSurveys() {
@@ -387,10 +403,6 @@ export function Landing() {
               <h1 className="max-w-4xl text-5xl font-black tracking-tight text-white md:text-7xl">
                 Collect accreditation survey responses and evaluate results faster.
               </h1>
-              <p className="max-w-2xl text-lg leading-8 text-slate-300">
-                SurveyStat connects active checklist questionnaires with real response statistics for evaluating the
-                AACCUP digital repository system and current accreditation evidence processes.
-              </p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
@@ -487,7 +499,7 @@ export function Landing() {
                             <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-400">{form.description}</p>
                           </div>
                           <span className="rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-200">
-                            {form.respondentInformationRequired ? "Info required" : "Info optional"}
+                            {form.respondentInformationRequired ? "Info required" : "Info off"}
                           </span>
                         </div>
                       </button>
@@ -502,9 +514,8 @@ export function Landing() {
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">
                       <feature.icon className="size-5" />
                     </span>
-                    <div>
+                    <div className="flex min-h-10 items-center">
                       <h3 className="font-bold">{feature.title}</h3>
-                      <p className="mt-1 text-sm leading-6 text-slate-400">{feature.description}</p>
                     </div>
                   </div>
                 ))}
@@ -517,7 +528,6 @@ export function Landing() {
       {isExistingSurveysDialogOpen ? (
         <DialogShell
           title="Existing Surveys"
-          description="Choose one survey or build a survey series. Selected surveys will appear as Survey 1, Survey 2, and so on."
           onClose={() => setIsExistingSurveysDialogOpen(false)}
           footer={
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -550,7 +560,6 @@ export function Landing() {
             >
               <ListChecks className="mb-3 size-5" />
               <p className="font-black">Single survey</p>
-              <p className="mt-1 text-sm leading-6 text-slate-400">Start only one active survey form.</p>
             </button>
             <button
               type="button"
@@ -563,45 +572,66 @@ export function Landing() {
             >
               <Layers3 className="mb-3 size-5" />
               <p className="font-black">Survey series</p>
-              <p className="mt-1 text-sm leading-6 text-slate-400">Select multiple surveys in order as Survey 1, Survey 2, and more.</p>
             </button>
           </div>
 
           <div className="grid gap-3">
             {forms.map((form, index) => {
               const isSelected = selectedSurveyCodes.includes(form.code)
+              const isUpdatingRespondentInfo = updatingRespondentInfoFormId === form.id
 
               return (
-                <button
+                <div
                   key={form.id}
-                  type="button"
-                  onClick={() => toggleExistingSurvey(form.code)}
-                  className={`rounded-2xl border p-4 text-left transition ${
+                  className={`rounded-2xl border p-4 transition ${
                     isSelected
                       ? "border-cyan-300 bg-cyan-300/10 shadow-lg shadow-cyan-950/20"
                       : "border-white/10 bg-white/5 hover:bg-white/10"
                   }`}
                 >
-                  <span className="flex items-start justify-between gap-4">
-                    <span>
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <button type="button" onClick={() => toggleExistingSurvey(form.code)} className="flex-1 text-left">
                       <span className="text-xs font-black uppercase tracking-wide text-cyan-200">
                         Survey {form.surveyStepNumber || index + 1}
                       </span>
                       <span className="mt-1 block text-lg font-black">{form.title}</span>
                       <span className="mt-2 line-clamp-2 block text-sm leading-6 text-slate-400">{form.description}</span>
-                      <span className="mt-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-slate-300">
-                        {form.respondentInformationRequired ? "Respondent information required" : "Respondent information optional"}
+                    </button>
+
+                    <div className="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end">
+                      <span
+                        className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
+                          isSelected ? "bg-cyan-400 text-slate-950" : "bg-white/10 text-slate-500"
+                        }`}
+                      >
+                        {isSelected ? <CheckCircle2 className="size-5" /> : index + 1}
                       </span>
-                    </span>
-                    <span
-                      className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
-                        isSelected ? "bg-cyan-400 text-slate-950" : "bg-white/10 text-slate-500"
-                      }`}
-                    >
-                      {isSelected ? <CheckCircle2 className="size-5" /> : index + 1}
-                    </span>
-                  </span>
-                </button>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={form.respondentInformationRequired}
+                        disabled={isUpdatingRespondentInfo}
+                        onClick={() => toggleExistingSurveyRespondentInformation(form)}
+                        className={`inline-flex items-center gap-3 rounded-full px-3 py-2 text-xs font-black uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                          form.respondentInformationRequired ? "bg-cyan-400 text-slate-950" : "bg-white/10 text-slate-300"
+                        }`}
+                      >
+                        <span
+                          className={`flex h-5 w-10 items-center rounded-full p-0.5 transition ${
+                            form.respondentInformationRequired ? "bg-slate-950/20" : "bg-slate-950/60"
+                          }`}
+                        >
+                          <span
+                            className={`size-4 rounded-full bg-white transition ${
+                              form.respondentInformationRequired ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </span>
+                        {isUpdatingRespondentInfo ? "Saving" : form.respondentInformationRequired ? "Required" : "Off"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )
             })}
           </div>
@@ -611,7 +641,6 @@ export function Landing() {
       {isCreateSurveyDialogOpen ? (
         <DialogShell
           title="Create New Survey"
-          description="Create one survey or a series. Respondent information can be switched on or off by the researcher before creating the survey."
           onClose={() => setIsCreateSurveyDialogOpen(false)}
           footer={
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -643,7 +672,6 @@ export function Landing() {
               >
                 <ListChecks className="mb-3 size-5" />
                 <p className="font-black">Create one survey</p>
-                <p className="mt-1 text-sm leading-6 text-slate-400">Use this for a standalone checklist questionnaire.</p>
               </button>
               <button
                 type="button"
@@ -656,7 +684,6 @@ export function Landing() {
               >
                 <Layers3 className="mb-3 size-5" />
                 <p className="font-black">Create survey series</p>
-                <p className="mt-1 text-sm leading-6 text-slate-400">Create Survey 1, Survey 2, and more in one flow.</p>
               </button>
             </div>
 
@@ -715,11 +742,6 @@ export function Landing() {
             >
               <span>
                 <span className="block font-black text-white">Respondent Information</span>
-                <span className="mt-1 block text-sm leading-6 text-slate-400">
-                  {respondentInformationRequired
-                    ? "Required before respondents can submit this survey."
-                    : "Optional; respondents may answer without personal details."}
-                </span>
               </span>
               <span
                 className={`flex h-8 w-16 items-center rounded-full p-1 transition ${

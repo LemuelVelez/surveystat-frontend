@@ -201,6 +201,10 @@ export type CreateSurveySeriesPayload = {
   forms: CreateSurveyFormPayload[]
 }
 
+export type UpdateSurveyFormRespondentInformationPayload = {
+  respondentInformationRequired: boolean
+}
+
 export type StatisticsFilters = {
   formId?: string
   formCode?: SurveyFormCode
@@ -377,6 +381,9 @@ export const surveyStatService = {
 
   createSurveySeries: (payload: CreateSurveySeriesPayload) =>
     surveystatApi.post<SurveyQuestionnaireForm[]>("/surveys/series", payload),
+
+  updateSurveyFormRespondentInformation: (formId: string, payload: UpdateSurveyFormRespondentInformationPayload) =>
+    surveystatApi.patch<SurveyForm>(`/surveys/forms/${encodeURIComponent(formId)}/respondent-information`, payload),
 
   getQuestionnaireByFormCode: (formCode: SurveyFormCode) =>
     surveystatApi.get<SurveyQuestionnaireForm>(
