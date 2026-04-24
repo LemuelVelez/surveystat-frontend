@@ -1,12 +1,27 @@
-import { useEffect, useMemo, useState } from "react"
-import { ArrowUpRight, BarChart3, ClipboardCheck, DatabaseZap, Loader2, ShieldCheck } from "lucide-react"
-import { Link } from "react-router-dom"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
+import {
+  ArrowUpRight,
+  BarChart3,
+  CheckCircle2,
+  ClipboardCheck,
+  DatabaseZap,
+  FilePlus2,
+  Layers3,
+  Loader2,
+  ListChecks,
+  Plus,
+  ShieldCheck,
+  X,
+} from "lucide-react"
+import { Link, useNavigate } from "react-router-dom"
+import { toast } from "sonner"
 
 import logoUrl from "@/assets/images/logo.svg"
 import {
   ACREDIFY_SYSTEM_URL,
   SurveyStatApiError,
   surveyStatService,
+  type CreateSurveyFormPayload,
   type StatisticsSummary,
   type SurveyForm,
 } from "@/api/surveystat"
@@ -28,6 +43,9 @@ const features = [
     icon: DatabaseZap,
   },
 ]
+
+const defaultSurveyInstruction =
+  "Please read each statement carefully and place a check mark (✓) under the appropriate number that best reflects your evaluation."
 
 function getErrorMessage(error: unknown) {
   if (error instanceof SurveyStatApiError || error instanceof Error) {
@@ -52,16 +70,118 @@ function getSurveyItemTotal(forms: SurveyForm[]) {
   return forms.length
 }
 
+function createCodeFromTitle(title: string, fallback: string) {
+  const code = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+
+  return (code || fallback).slice(0, 40)
+}
+
+function getDefaultSections(stepNumber: number): CreateSurveyFormPayload["sections"] {
+  return [
+    {
+      code: `survey_${stepNumber}_section_1`,
+      title: "Survey Items",
+      sortOrder: 1,
+      items: [
+        {
+          code: `survey_${stepNumber}_item_1`,
+          statement: "Replace this sample checklist item with the actual survey indicator.",
+          sortOrder: 1,
+          isRequired: true,
+        },
+      ],
+    },
+  ]
+}
+
+type DialogShellProps = {
+  title: string
+  description: string
+  children: ReactNode
+  footer?: ReactNode
+  onClose: () => void
+}
+
+function DialogShell({ title, description, children, footer, onClose }: DialogShellProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-4 backdrop-blur">
+      <section className="max-h-[95svh] w-full max-w-4xl overflow-auto rounded-3xl border border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/60">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-white/10 bg-slate-950/95 px-6 py-5 backdrop-blur">
+          <div>
+            <h2 className="text-2xl font-black tracking-tight">{title}</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">{description}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-200 transition hover:bg-white/10 hover:text-white"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="px-6 py-6">{children}</div>
+
+        {footer ? (
+          <div className="sticky bottom-0 border-t border-white/10 bg-slate-950/95 px-6 py-5 backdrop-blur">
+            {footer}
+          </div>
+        ) : null}
+      </section>
+    </div>
+  )
+}
+
 export function Landing() {
+  const navigate = useNavigate()
   const [forms, setForms] = useState<SurveyForm[]>([])
   const [summary, setSummary] = useState<StatisticsSummary | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState("")
+  const [isExistingSurveysDialogOpen, setIsExistingSurveysDialogOpen] = useState(false)
+  const [isCreateSurveyDialogOpen, setIsCreateSurveyDialogOpen] = useState(false)
+  const [existingSurveyMode, setExistingSurveyMode] = useState<"single" | "series">("single")
+  const [selectedSurveyCodes, setSelectedSurveyCodes] = useState<string[]>([])
+  const [createMode, setCreateMode] = useState<"single" | "series">("single")
+  const [createSurveyTitle, setCreateSurveyTitle] = useState("")
+  const [createSurveyDescription, setCreateSurveyDescription] = useState("")
+  const [surveyStepCount, setSurveyStepCount] = useState(2)
+  const [respondentInformationRequired, setRespondentInformationRequired] = useState(true)
+  const [isCreatingSurvey, setIsCreatingSurvey] = useState(false)
+
+  async function loadLandingData() {
+    setIsLoading(true)
+    setErrorMessage("")
+
+    try {
+      const [surveyForms, statisticsSummary] = await Promise.all([
+        surveyStatService.listSurveyForms(true),
+        surveyStatService.getStatisticsSummary(),
+      ])
+
+      setForms(surveyForms)
+      setSummary(statisticsSummary)
+      setSelectedSurveyCodes((current) => {
+        const availableCodes = new Set(surveyForms.map((form) => form.code))
+        const preserved = current.filter((code) => availableCodes.has(code))
+
+        return preserved.length > 0 ? preserved : surveyForms[0]?.code ? [surveyForms[0].code] : []
+      })
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
     let isMounted = true
 
-    async function loadLandingData() {
+    async function loadData() {
       setIsLoading(true)
       setErrorMessage("")
 
@@ -75,6 +195,7 @@ export function Landing() {
 
         setForms(surveyForms)
         setSummary(statisticsSummary)
+        setSelectedSurveyCodes(surveyForms[0]?.code ? [surveyForms[0].code] : [])
       } catch (error) {
         if (!isMounted) return
         setErrorMessage(getErrorMessage(error))
@@ -85,7 +206,7 @@ export function Landing() {
       }
     }
 
-    loadLandingData()
+    loadData()
 
     return () => {
       isMounted = false
@@ -94,11 +215,104 @@ export function Landing() {
 
   const activeSurveyCards = useMemo(() => forms.slice(0, 4), [forms])
   const highlightedSurvey = activeSurveyCards[0]
+  const selectedExistingSurveys = useMemo(
+    () => forms.filter((form) => selectedSurveyCodes.includes(form.code)),
+    [forms, selectedSurveyCodes],
+  )
+
+  function openExistingSurveysDialog() {
+    setSelectedSurveyCodes((current) => (current.length > 0 ? current : forms[0]?.code ? [forms[0].code] : []))
+    setIsExistingSurveysDialogOpen(true)
+  }
+
+  function toggleExistingSurvey(formCode: string) {
+    setSelectedSurveyCodes((current) => {
+      if (existingSurveyMode === "single") {
+        return [formCode]
+      }
+
+      if (current.includes(formCode)) {
+        const next = current.filter((code) => code !== formCode)
+        return next.length > 0 ? next : [formCode]
+      }
+
+      return [...current, formCode]
+    })
+  }
+
+  function startSelectedSurveys() {
+    const codes = selectedSurveyCodes.length > 0 ? selectedSurveyCodes : forms[0]?.code ? [forms[0].code] : []
+
+    if (codes.length === 0) {
+      toast.error("No active survey is available.")
+      return
+    }
+
+    navigate(`/survey?forms=${encodeURIComponent(codes.join(","))}`)
+  }
+
+  async function handleCreateSurveySeries() {
+    const title = createSurveyTitle.trim()
+
+    if (!title) {
+      toast.error("Please enter the survey title.")
+      return
+    }
+
+    const stepCount = createMode === "series" ? Math.max(2, Math.min(surveyStepCount, 10)) : 1
+    const timestamp = Date.now().toString(36)
+    const baseCode = createCodeFromTitle(title, "custom_survey")
+
+    const formsToCreate = Array.from({ length: stepCount }, (_, index) => {
+      const stepNumber = index + 1
+      const stepTitle = createMode === "series" ? `${title} - Survey ${stepNumber}` : title
+
+      return {
+        code: `${baseCode}_${timestamp}_${stepNumber}`,
+        title: stepTitle,
+        description: createSurveyDescription.trim() || "Custom survey created by the researcher.",
+        instruction: defaultSurveyInstruction,
+        respondentInformationRequired,
+        isActive: true,
+        surveySeriesId: `${baseCode}_${timestamp}`,
+        surveySeriesTitle: title,
+        surveyStepNumber: stepNumber,
+        sections: getDefaultSections(stepNumber),
+      } satisfies CreateSurveyFormPayload
+    })
+
+    setIsCreatingSurvey(true)
+
+    try {
+      const createdForms = await surveyStatService.createSurveySeries({
+        surveySeriesTitle: title,
+        surveySeriesId: `${baseCode}_${timestamp}`,
+        forms: formsToCreate,
+      })
+
+      toast.success(createMode === "series" ? "Survey series created successfully." : "Survey created successfully.")
+      setCreateSurveyTitle("")
+      setCreateSurveyDescription("")
+      setSurveyStepCount(2)
+      setRespondentInformationRequired(true)
+      setIsCreateSurveyDialogOpen(false)
+      await loadLandingData()
+
+      const createdCodes = createdForms.map((form) => form.code)
+      if (createdCodes.length > 0) {
+        navigate(`/survey?forms=${encodeURIComponent(createdCodes.join(","))}`)
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setIsCreatingSurvey(false)
+    }
+  }
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 py-8 lg:px-8">
-        <nav className="flex items-center justify-between rounded-3xl border border-white/10 bg-white/5 px-5 py-4 backdrop-blur">
+        <nav className="sticky top-4 z-40 flex items-center justify-between rounded-3xl border border-white/10 bg-slate-950/80 px-5 py-4 shadow-2xl shadow-slate-950/30 backdrop-blur">
           <Link to="/" className="flex items-center gap-3 font-semibold tracking-tight">
             <span className="flex size-12 items-center justify-center rounded-2xl bg-white p-2 shadow-lg shadow-cyan-400/20">
               <img src={logoUrl} alt="SurveyStat logo" className="size-full object-contain" />
@@ -107,12 +321,22 @@ export function Landing() {
           </Link>
 
           <div className="hidden items-center gap-3 md:flex">
-            <Link
-              to="/survey"
-              className="rounded-full px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-white"
+            <button
+              type="button"
+              onClick={openExistingSurveysDialog}
+              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-slate-200 transition hover:bg-white/10 hover:text-white"
             >
-              Survey
-            </Link>
+              <ListChecks className="size-4" />
+              Existing Surveys
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsCreateSurveyDialogOpen(true)}
+              className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm font-bold text-cyan-100 transition hover:bg-cyan-300/20"
+            >
+              <Plus className="size-4" />
+              Create New Survey
+            </button>
             <Link
               to="/statistic"
               className="rounded-full px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-white"
@@ -132,6 +356,25 @@ export function Landing() {
             ) : null}
           </div>
         </nav>
+
+        <div className="mt-4 flex flex-col gap-3 md:hidden">
+          <button
+            type="button"
+            onClick={openExistingSurveysDialog}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white"
+          >
+            <ListChecks className="size-4" />
+            Existing Surveys
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsCreateSurveyDialogOpen(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-bold text-slate-950"
+          >
+            <Plus className="size-4" />
+            Create New Survey
+          </button>
+        </div>
 
         <div className="grid flex-1 items-center gap-12 py-16 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-8">
@@ -172,18 +415,22 @@ export function Landing() {
             ) : null}
 
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Link
-                to="/survey"
-                className="inline-flex items-center justify-center rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-bold text-slate-950 shadow-xl shadow-cyan-400/20 transition hover:bg-cyan-300"
+              <button
+                type="button"
+                onClick={openExistingSurveysDialog}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-bold text-slate-950 shadow-xl shadow-cyan-400/20 transition hover:bg-cyan-300"
               >
-                Answer Survey
-              </Link>
-              <Link
-                to="/statistic"
-                className="inline-flex items-center justify-center rounded-2xl border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                <ListChecks className="size-4" />
+                Existing Surveys
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCreateSurveyDialogOpen(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10"
               >
-                View Statistics
-              </Link>
+                <FilePlus2 className="size-4" />
+                Create New Survey
+              </button>
             </div>
           </div>
 
@@ -221,22 +468,29 @@ export function Landing() {
                   </div>
 
                   <div className="mt-6 space-y-3">
-                    {activeSurveyCards.map((form) => (
-                      <Link
+                    {activeSurveyCards.map((form, index) => (
+                      <button
                         key={form.id}
-                        to={`/survey?form=${encodeURIComponent(form.code)}`}
-                        className="block rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:border-cyan-300/50 hover:bg-cyan-300/10"
+                        type="button"
+                        onClick={() => {
+                          setSelectedSurveyCodes([form.code])
+                          setIsExistingSurveysDialogOpen(true)
+                        }}
+                        className="block w-full rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-300/50 hover:bg-cyan-300/10"
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <h3 className="font-bold">{form.title}</h3>
+                            <p className="text-xs font-black uppercase tracking-wide text-cyan-200">
+                              Survey {form.surveyStepNumber || index + 1}
+                            </p>
+                            <h3 className="mt-1 font-bold">{form.title}</h3>
                             <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-400">{form.description}</p>
                           </div>
                           <span className="rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-200">
                             {form.respondentInformationRequired ? "Info required" : "Info optional"}
                           </span>
                         </div>
-                      </Link>
+                      </button>
                     ))}
                   </div>
                 </>
@@ -259,6 +513,229 @@ export function Landing() {
           </div>
         </div>
       </section>
+
+      {isExistingSurveysDialogOpen ? (
+        <DialogShell
+          title="Existing Surveys"
+          description="Choose one survey or build a survey series. Selected surveys will appear as Survey 1, Survey 2, and so on."
+          onClose={() => setIsExistingSurveysDialogOpen(false)}
+          footer={
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-semibold text-slate-300">
+                {selectedExistingSurveys.length} selected survey{selectedExistingSurveys.length === 1 ? "" : "s"}
+              </p>
+              <button
+                type="button"
+                onClick={startSelectedSurveys}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300"
+              >
+                <ArrowUpRight className="size-4" />
+                Start Selected
+              </button>
+            </div>
+          }
+        >
+          <div className="mb-5 grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => {
+                setExistingSurveyMode("single")
+                setSelectedSurveyCodes((current) => [current[0] ?? forms[0]?.code ?? ""])
+              }}
+              className={`rounded-2xl border p-4 text-left transition ${
+                existingSurveyMode === "single"
+                  ? "border-cyan-300 bg-cyan-300/10 text-cyan-50"
+                  : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+              }`}
+            >
+              <ListChecks className="mb-3 size-5" />
+              <p className="font-black">Single survey</p>
+              <p className="mt-1 text-sm leading-6 text-slate-400">Start only one active survey form.</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setExistingSurveyMode("series")}
+              className={`rounded-2xl border p-4 text-left transition ${
+                existingSurveyMode === "series"
+                  ? "border-cyan-300 bg-cyan-300/10 text-cyan-50"
+                  : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+              }`}
+            >
+              <Layers3 className="mb-3 size-5" />
+              <p className="font-black">Survey series</p>
+              <p className="mt-1 text-sm leading-6 text-slate-400">Select multiple surveys in order as Survey 1, Survey 2, and more.</p>
+            </button>
+          </div>
+
+          <div className="grid gap-3">
+            {forms.map((form, index) => {
+              const isSelected = selectedSurveyCodes.includes(form.code)
+
+              return (
+                <button
+                  key={form.id}
+                  type="button"
+                  onClick={() => toggleExistingSurvey(form.code)}
+                  className={`rounded-2xl border p-4 text-left transition ${
+                    isSelected
+                      ? "border-cyan-300 bg-cyan-300/10 shadow-lg shadow-cyan-950/20"
+                      : "border-white/10 bg-white/5 hover:bg-white/10"
+                  }`}
+                >
+                  <span className="flex items-start justify-between gap-4">
+                    <span>
+                      <span className="text-xs font-black uppercase tracking-wide text-cyan-200">
+                        Survey {form.surveyStepNumber || index + 1}
+                      </span>
+                      <span className="mt-1 block text-lg font-black">{form.title}</span>
+                      <span className="mt-2 line-clamp-2 block text-sm leading-6 text-slate-400">{form.description}</span>
+                      <span className="mt-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-slate-300">
+                        {form.respondentInformationRequired ? "Respondent information required" : "Respondent information optional"}
+                      </span>
+                    </span>
+                    <span
+                      className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
+                        isSelected ? "bg-cyan-400 text-slate-950" : "bg-white/10 text-slate-500"
+                      }`}
+                    >
+                      {isSelected ? <CheckCircle2 className="size-5" /> : index + 1}
+                    </span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </DialogShell>
+      ) : null}
+
+      {isCreateSurveyDialogOpen ? (
+        <DialogShell
+          title="Create New Survey"
+          description="Create one survey or a series. Respondent information can be switched on or off by the researcher before creating the survey."
+          onClose={() => setIsCreateSurveyDialogOpen(false)}
+          footer={
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-semibold text-slate-300">
+                {createMode === "series" ? `${surveyStepCount} survey steps will be created.` : "One survey will be created."}
+              </p>
+              <button
+                type="button"
+                onClick={handleCreateSurveySeries}
+                disabled={isCreatingSurvey}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+              >
+                {isCreatingSurvey ? <Loader2 className="size-4 animate-spin" /> : <FilePlus2 className="size-4" />}
+                Create Survey
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-6">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setCreateMode("single")}
+                className={`rounded-2xl border p-4 text-left transition ${
+                  createMode === "single"
+                    ? "border-cyan-300 bg-cyan-300/10 text-cyan-50"
+                    : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                }`}
+              >
+                <ListChecks className="mb-3 size-5" />
+                <p className="font-black">Create one survey</p>
+                <p className="mt-1 text-sm leading-6 text-slate-400">Use this for a standalone checklist questionnaire.</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateMode("series")}
+                className={`rounded-2xl border p-4 text-left transition ${
+                  createMode === "series"
+                    ? "border-cyan-300 bg-cyan-300/10 text-cyan-50"
+                    : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                }`}
+              >
+                <Layers3 className="mb-3 size-5" />
+                <p className="font-black">Create survey series</p>
+                <p className="mt-1 text-sm leading-6 text-slate-400">Create Survey 1, Survey 2, and more in one flow.</p>
+              </button>
+            </div>
+
+            <label className="block">
+              <span className="text-sm font-black text-slate-200">Survey Title</span>
+              <input
+                value={createSurveyTitle}
+                onChange={(event) => setCreateSurveyTitle(event.target.value)}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10"
+                placeholder="Enter survey title"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-black text-slate-200">Description</span>
+              <textarea
+                value={createSurveyDescription}
+                onChange={(event) => setCreateSurveyDescription(event.target.value)}
+                className="mt-2 min-h-28 w-full resize-y rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10"
+                placeholder="Describe the purpose of the survey"
+              />
+            </label>
+
+            {createMode === "series" ? (
+              <div>
+                <p className="text-sm font-black text-slate-200">Number of survey steps</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[2, 3, 4, 5, 6].map((count) => (
+                    <button
+                      key={count}
+                      type="button"
+                      onClick={() => setSurveyStepCount(count)}
+                      className={`rounded-full px-4 py-2 text-sm font-black transition ${
+                        surveyStepCount === count
+                          ? "bg-cyan-400 text-slate-950"
+                          : "bg-white/10 text-slate-300 hover:bg-white/15"
+                      }`}
+                    >
+                      {count} surveys
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={respondentInformationRequired}
+              onClick={() => setRespondentInformationRequired((current) => !current)}
+              className={`flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition ${
+                respondentInformationRequired
+                  ? "border-cyan-300 bg-cyan-300/10"
+                  : "border-white/10 bg-white/5 hover:bg-white/10"
+              }`}
+            >
+              <span>
+                <span className="block font-black text-white">Respondent Information</span>
+                <span className="mt-1 block text-sm leading-6 text-slate-400">
+                  {respondentInformationRequired
+                    ? "Required before respondents can submit this survey."
+                    : "Optional; respondents may answer without personal details."}
+                </span>
+              </span>
+              <span
+                className={`flex h-8 w-16 items-center rounded-full p-1 transition ${
+                  respondentInformationRequired ? "bg-cyan-400" : "bg-white/10"
+                }`}
+              >
+                <span
+                  className={`size-6 rounded-full bg-white transition ${
+                    respondentInformationRequired ? "translate-x-8" : "translate-x-0"
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
+        </DialogShell>
+      ) : null}
     </main>
   )
 }

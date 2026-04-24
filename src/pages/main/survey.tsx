@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState, type SyntheticEvent } from "react"
-import { ArrowLeft, CheckCircle2, ChevronLeft, ClipboardList, Loader2, Send, UserRound } from "lucide-react"
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Loader2,
+  Send,
+  UserRound,
+} from "lucide-react"
 import { Link, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -9,7 +18,6 @@ import {
   surveyStatService,
   type CreateRespondentPayload,
   type LikertValue,
-  type SurveyForm,
   type SurveyQuestionnaireForm,
   type SubmitSurveyAnswerPayload,
 } from "@/api/surveystat"
@@ -23,6 +31,15 @@ const defaultScale = [
 ]
 
 const respondentRoles = ["Student", "Faculty", "QA Personnel", "Administrator", "Other"]
+
+type SurveyDraft = {
+  answers: Record<string, LikertValue>
+  respondent: CreateRespondentPayload
+  includeRespondentInformation: boolean
+  respondentSignature: string
+  voluntaryConsent: boolean
+  isSubmitted: boolean
+}
 
 function getErrorMessage(error: unknown) {
   if (error instanceof SurveyStatApiError || error instanceof Error) {
@@ -63,38 +80,42 @@ function getInitialRespondent(): CreateRespondentPayload {
   }
 }
 
+function getInitialDraft(includeRespondentInformation = true): SurveyDraft {
+  return {
+    answers: {},
+    respondent: getInitialRespondent(),
+    includeRespondentInformation,
+    respondentSignature: "",
+    voluntaryConsent: false,
+    isSubmitted: false,
+  }
+}
+
+function getRequestedFormCodes(formsParam: string, formParam: string) {
+  const source = formsParam || formParam
+
+  return source
+    .split(",")
+    .map((code) => code.trim())
+    .filter(Boolean)
+}
+
 export function Survey() {
   const [searchParams] = useSearchParams()
-  const requestedFormCode = searchParams.get("form") ?? ""
-  const [forms, setForms] = useState<SurveyForm[]>([])
-  const [selectedFormCode, setSelectedFormCode] = useState("")
-  const [questionnaire, setQuestionnaire] = useState<SurveyQuestionnaireForm | null>(null)
-  const [answers, setAnswers] = useState<Record<string, LikertValue>>({})
-  const [respondent, setRespondent] = useState<CreateRespondentPayload>(getInitialRespondent)
-  const [includeRespondentInformation, setIncludeRespondentInformation] = useState(true)
-  const [respondentSignature, setRespondentSignature] = useState("")
-  const [voluntaryConsent, setVoluntaryConsent] = useState(false)
-  const [currentStep, setCurrentStep] = useState<1 | 2>(1)
+  const requestedFormsParam = searchParams.get("forms") ?? ""
+  const requestedFormParam = searchParams.get("form") ?? ""
+  const requestedFormCodes = useMemo(
+    () => getRequestedFormCodes(requestedFormsParam, requestedFormParam),
+    [requestedFormsParam, requestedFormParam],
+  )
+  const [selectedFormCodes, setSelectedFormCodes] = useState<string[]>([])
+  const [questionnaires, setQuestionnaires] = useState<SurveyQuestionnaireForm[]>([])
+  const [drafts, setDrafts] = useState<Record<string, SurveyDraft>>({})
+  const [currentSurveyIndex, setCurrentSurveyIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isQuestionnaireLoading, setIsQuestionnaireLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
-
-  const allItems = useMemo(
-    () => questionnaire?.sections.flatMap((section) => section.items) ?? [],
-    [questionnaire],
-  )
-  const requiredItems = useMemo(() => allItems.filter((item) => item.isRequired), [allItems])
-  const answeredCount = getAnsweredCount(answers)
-  const scale = normalizeScale(questionnaire?.scale)
-  const selectedForm = useMemo(
-    () => forms.find((form) => form.code === selectedFormCode) ?? null,
-    [forms, selectedFormCode],
-  )
-  const respondentInformationRequired = questionnaire?.respondentInformationRequired ?? selectedForm?.respondentInformationRequired ?? true
-  const respondentInformationComplete = hasRequiredRespondentInformation(respondent)
-  const requiredChecklistComplete = requiredItems.every((item) => answers[item.id])
-  const isComplete = requiredChecklistComplete && voluntaryConsent && (!respondentInformationRequired || respondentInformationComplete)
 
   useEffect(() => {
     let isMounted = true
@@ -108,10 +129,12 @@ export function Survey() {
 
         if (!isMounted) return
 
-        setForms(surveyForms)
-        setSelectedFormCode(
-          surveyForms.find((form) => form.code === requestedFormCode)?.code ?? surveyForms[0]?.code ?? "",
-        )
+        const availableCodes = new Set(surveyForms.map((form) => form.code))
+        const codesFromUrl = requestedFormCodes.filter((code) => availableCodes.has(code))
+        const nextCodes = codesFromUrl.length > 0 ? codesFromUrl : surveyForms[0]?.code ? [surveyForms[0].code] : []
+
+        setSelectedFormCodes(nextCodes)
+        setCurrentSurveyIndex(0)
       } catch (error) {
         if (!isMounted) return
         setErrorMessage(getErrorMessage(error))
@@ -127,34 +150,43 @@ export function Survey() {
     return () => {
       isMounted = false
     }
-  }, [requestedFormCode])
+  }, [requestedFormCodes])
 
   useEffect(() => {
-    if (!selectedFormCode) {
-      setQuestionnaire(null)
+    if (selectedFormCodes.length === 0) {
+      setQuestionnaires([])
+      setDrafts({})
       return
     }
 
     let isMounted = true
 
-    async function loadQuestionnaire() {
+    async function loadQuestionnaires() {
       setIsQuestionnaireLoading(true)
       setErrorMessage("")
 
       try {
-        const selectedQuestionnaire = await surveyStatService.getQuestionnaireByFormCode(selectedFormCode)
+        const selectedQuestionnaires = await Promise.all(
+          selectedFormCodes.map((formCode) => surveyStatService.getQuestionnaireByFormCode(formCode)),
+        )
 
         if (!isMounted) return
 
-        setQuestionnaire(selectedQuestionnaire)
-        setAnswers({})
-        setVoluntaryConsent(false)
-        setRespondentSignature("")
-        setIncludeRespondentInformation(selectedQuestionnaire.respondentInformationRequired)
-        setCurrentStep(1)
+        setQuestionnaires(selectedQuestionnaires)
+        setDrafts((current) => {
+          const nextDrafts: Record<string, SurveyDraft> = {}
+
+          selectedQuestionnaires.forEach((questionnaire) => {
+            nextDrafts[questionnaire.code] =
+              current[questionnaire.code] ?? getInitialDraft(questionnaire.respondentInformationRequired)
+          })
+
+          return nextDrafts
+        })
+        setCurrentSurveyIndex(0)
       } catch (error) {
         if (!isMounted) return
-        setQuestionnaire(null)
+        setQuestionnaires([])
         setErrorMessage(getErrorMessage(error))
       } finally {
         if (isMounted) {
@@ -163,69 +195,117 @@ export function Survey() {
       }
     }
 
-    loadQuestionnaire()
+    loadQuestionnaires()
 
     return () => {
       isMounted = false
     }
-  }, [selectedFormCode])
+  }, [selectedFormCodes])
+
+  const currentQuestionnaire = questionnaires[currentSurveyIndex] ?? null
+  const currentCode = currentQuestionnaire?.code ?? ""
+  const currentDraft = currentCode ? drafts[currentCode] ?? getInitialDraft(currentQuestionnaire?.respondentInformationRequired) : getInitialDraft()
+  const allItems = useMemo(
+    () => currentQuestionnaire?.sections.flatMap((section) => section.items) ?? [],
+    [currentQuestionnaire],
+  )
+  const requiredItems = useMemo(() => allItems.filter((item) => item.isRequired), [allItems])
+  const answeredCount = getAnsweredCount(currentDraft.answers)
+  const scale = normalizeScale(currentQuestionnaire?.scale)
+  const respondentInformationRequired = currentQuestionnaire?.respondentInformationRequired ?? true
+  const respondentInformationComplete = hasRequiredRespondentInformation(currentDraft.respondent)
+  const requiredChecklistComplete = requiredItems.every((item) => currentDraft.answers[item.id])
+  const isCurrentSurveyComplete =
+    requiredChecklistComplete &&
+    currentDraft.voluntaryConsent &&
+    (!respondentInformationRequired || respondentInformationComplete)
+  const completedCount = questionnaires.filter((questionnaire) => drafts[questionnaire.code]?.isSubmitted).length
+
+  function updateCurrentDraft(updater: (current: SurveyDraft) => SurveyDraft) {
+    if (!currentQuestionnaire) return
+
+    setDrafts((current) => {
+      const existingDraft = current[currentQuestionnaire.code] ?? getInitialDraft(currentQuestionnaire.respondentInformationRequired)
+
+      return {
+        ...current,
+        [currentQuestionnaire.code]: updater(existingDraft),
+      }
+    })
+  }
 
   function updateRespondent<K extends keyof CreateRespondentPayload>(key: K, value: CreateRespondentPayload[K]) {
-    setRespondent((current) => ({
+    updateCurrentDraft((current) => ({
       ...current,
-      [key]: value,
+      respondent: {
+        ...current.respondent,
+        [key]: value,
+      },
     }))
   }
 
   function updateAnswer(itemId: string, rating: LikertValue) {
-    setAnswers((current) => ({
+    updateCurrentDraft((current) => ({
       ...current,
-      [itemId]: rating,
+      answers: {
+        ...current.answers,
+        [itemId]: rating,
+      },
+      isSubmitted: false,
     }))
   }
 
-  function handleContinueToChecklist() {
-    if (!questionnaire) {
-      toast.error("Please select a survey first.")
-      return
-    }
+  function setIncludeRespondentInformation(value: boolean) {
+    updateCurrentDraft((current) => ({
+      ...current,
+      includeRespondentInformation: value,
+      isSubmitted: false,
+    }))
+  }
 
-    if (respondentInformationRequired && !respondentInformationComplete) {
-      toast.error("Please complete the required respondent information.")
-      return
-    }
+  function setRespondentSignature(value: string) {
+    updateCurrentDraft((current) => ({
+      ...current,
+      respondentSignature: value,
+      isSubmitted: false,
+    }))
+  }
 
-    setCurrentStep(2)
+  function setVoluntaryConsent(value: boolean) {
+    updateCurrentDraft((current) => ({
+      ...current,
+      voluntaryConsent: value,
+      isSubmitted: false,
+    }))
   }
 
   function getRespondentPayload() {
-    if (!respondentInformationRequired && !includeRespondentInformation) {
+    if (!respondentInformationRequired && !currentDraft.includeRespondentInformation) {
       return null
     }
 
-    return respondent
+    return currentDraft.respondent
   }
 
-  async function handleSubmit(event: SyntheticEvent<HTMLFormElement>) {
+  async function handleSubmitCurrentSurvey(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!questionnaire) {
+    if (!currentQuestionnaire) {
       toast.error("Please select a survey first.")
       return
     }
 
     if (respondentInformationRequired && !respondentInformationComplete) {
       toast.error("Please complete the required respondent information.")
-      setCurrentStep(1)
       return
     }
 
-    if (!voluntaryConsent) {
+    if (!currentDraft.voluntaryConsent) {
       toast.error("Please confirm voluntary consent before submitting.")
       return
     }
 
-    const missingRequiredItems = requiredItems.filter((item) => !answers[item.id])
+    const missingRequiredItems = requiredItems.filter((item) => !currentDraft.answers[item.id])
 
     if (missingRequiredItems.length > 0) {
       toast.error("Please answer all required checklist items.")
@@ -233,30 +313,35 @@ export function Survey() {
     }
 
     const payloadAnswers: SubmitSurveyAnswerPayload[] = allItems
-      .filter((item) => answers[item.id])
+      .filter((item) => currentDraft.answers[item.id])
       .map((item) => ({
         itemId: item.id,
-        rating: answers[item.id],
+        rating: currentDraft.answers[item.id],
       }))
 
     setIsSubmitting(true)
 
     try {
       await surveyStatService.submitSurveyResponse({
-        formId: questionnaire.id,
-        formCode: questionnaire.code,
+        formId: currentQuestionnaire.id,
+        formCode: currentQuestionnaire.code,
         respondent: getRespondentPayload(),
-        respondentSignature,
-        voluntaryConsent,
+        respondentSignature: currentDraft.respondentSignature,
+        voluntaryConsent: currentDraft.voluntaryConsent,
         answers: payloadAnswers,
       })
 
-      toast.success("Survey response submitted successfully.")
-      setAnswers({})
-      setRespondent(getInitialRespondent())
-      setRespondentSignature("")
-      setVoluntaryConsent(false)
-      setCurrentStep(1)
+      updateCurrentDraft((current) => ({
+        ...current,
+        isSubmitted: true,
+      }))
+
+      if (currentSurveyIndex < questionnaires.length - 1) {
+        toast.success(`Survey ${currentSurveyIndex + 1} submitted. Continue to Survey ${currentSurveyIndex + 2}.`)
+        setCurrentSurveyIndex((current) => current + 1)
+      } else {
+        toast.success("Survey response series submitted successfully.")
+      }
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -267,7 +352,7 @@ export function Survey() {
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
       <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-        <header className="mb-8 flex flex-col gap-5 rounded-3xl bg-slate-950 p-6 text-white shadow-xl lg:flex-row lg:items-center lg:justify-between">
+        <header className="sticky top-4 z-40 mb-8 flex flex-col gap-5 rounded-3xl bg-slate-950/95 p-6 text-white shadow-xl shadow-slate-300/40 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
           <div>
             <Link to="/" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-cyan-200 hover:text-cyan-100">
               <ArrowLeft className="size-4" />
@@ -280,23 +365,43 @@ export function Survey() {
               <div>
                 <h1 className="text-3xl font-black tracking-tight md:text-4xl">Survey Checklist</h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-                  Complete Step 1 for respondent details, then proceed to Step 2 to place your checks for each survey item.
+                  Complete Survey 1, Survey 2, and the next surveys in order. Each survey is submitted before moving forward.
                 </p>
               </div>
             </div>
           </div>
 
-          <Link
-            to="/statistic"
-            className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-slate-100"
-          >
-            View Statistics
-          </Link>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-100">
+              {completedCount}/{questionnaires.length || 0} surveys submitted
+            </div>
+            <Link
+              to="/statistic"
+              className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-slate-100"
+            >
+              View Statistics
+            </Link>
+          </div>
         </header>
 
-        <div className="mb-6 grid gap-3 sm:grid-cols-2">
-          <StepCard step={1} title="Respondent Information" isActive={currentStep === 1} isComplete={!respondentInformationRequired || respondentInformationComplete} />
-          <StepCard step={2} title="Checklist Evaluation" isActive={currentStep === 2} isComplete={requiredChecklistComplete && voluntaryConsent} />
+        <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {questionnaires.length > 0 ? (
+            questionnaires.map((questionnaire, index) => (
+              <SurveyStepCard
+                key={questionnaire.id}
+                step={index + 1}
+                title={questionnaire.title}
+                isActive={currentSurveyIndex === index}
+                isComplete={Boolean(drafts[questionnaire.code]?.isSubmitted)}
+                onClick={() => setCurrentSurveyIndex(index)}
+              />
+            ))
+          ) : (
+            <>
+              <SurveyStepCard step={1} title="Survey 1" isActive isComplete={false} onClick={() => undefined} />
+              <SurveyStepCard step={2} title="Survey 2" isActive={false} isComplete={false} onClick={() => undefined} />
+            </>
+          )}
         </div>
 
         {errorMessage ? (
@@ -310,201 +415,175 @@ export function Survey() {
             <Loader2 className="size-8 animate-spin text-cyan-600" />
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {currentStep === 1 ? (
-              <section className="rounded-3xl bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p className="text-sm font-bold uppercase tracking-wide text-cyan-700">Step 1</p>
-                    <h2 className="mt-2 text-2xl font-black">Respondent Information</h2>
-                    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                      Select an active survey and provide the respondent details required for that survey.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
-                    {answeredCount}/{allItems.length || 0} answered
-                  </div>
+          <form onSubmit={handleSubmitCurrentSurvey} className="space-y-6">
+            <section className="rounded-3xl bg-white p-6 shadow-sm">
+              {isQuestionnaireLoading ? (
+                <div className="flex min-h-96 items-center justify-center">
+                  <Loader2 className="size-8 animate-spin text-cyan-600" />
                 </div>
-
-                <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {forms.map((form) => {
-                    const isSelected = selectedFormCode === form.code
-
-                    return (
-                      <button
-                        key={form.id}
-                        type="button"
-                        onClick={() => setSelectedFormCode(form.code)}
-                        className={`rounded-2xl border p-5 text-left transition ${
-                          isSelected
-                            ? "border-cyan-500 bg-cyan-50 shadow-lg shadow-cyan-100"
-                            : "border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50/50"
-                        }`}
-                      >
-                        <span className="flex items-start justify-between gap-4">
-                          <span>
-                            <span className="text-base font-black text-slate-950">{form.title}</span>
-                            <span className="mt-2 line-clamp-3 block text-sm leading-6 text-slate-500">{form.description}</span>
-                          </span>
-                          {isSelected ? <CheckCircle2 className="size-5 shrink-0 text-cyan-600" /> : null}
-                        </span>
-                        <span className="mt-4 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-                          {form.respondentInformationRequired ? "Respondent info required" : "Respondent info optional"}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-
-                <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="flex size-10 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700">
-                        <UserRound className="size-5" />
-                      </span>
-                      <div>
-                        <h3 className="font-black text-slate-950">Respondent Details</h3>
-                        <p className="text-sm text-slate-500">
-                          {respondentInformationRequired ? "Required by this survey" : "Optional for this survey"}
-                        </p>
-                      </div>
+              ) : currentQuestionnaire ? (
+                <div className="space-y-8">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p className="text-sm font-bold uppercase tracking-wide text-cyan-700">
+                        Survey {currentSurveyIndex + 1} of {questionnaires.length} · {currentQuestionnaire.code}
+                      </p>
+                      <h2 className="mt-2 text-3xl font-black tracking-tight">{currentQuestionnaire.title}</h2>
+                      <p className="mt-3 text-sm leading-7 text-slate-600">{currentQuestionnaire.description}</p>
+                      {currentQuestionnaire.instruction ? (
+                        <div className="mt-4 rounded-2xl border border-cyan-100 bg-cyan-50 p-4 text-sm leading-7 text-cyan-900">
+                          {currentQuestionnaire.instruction}
+                        </div>
+                      ) : null}
                     </div>
 
-                    {!respondentInformationRequired ? (
+                    <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
                       <button
                         type="button"
-                        role="switch"
-                        aria-checked={includeRespondentInformation}
-                        onClick={() => setIncludeRespondentInformation((current) => !current)}
-                        className={`inline-flex items-center gap-3 rounded-full px-3 py-2 text-sm font-bold transition ${
-                          includeRespondentInformation ? "bg-cyan-600 text-white" : "bg-slate-200 text-slate-700"
-                        }`}
+                        onClick={() => setCurrentSurveyIndex((current) => Math.max(current - 1, 0))}
+                        disabled={currentSurveyIndex === 0}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                       >
-                        <span
-                          className={`size-5 rounded-full bg-white transition ${includeRespondentInformation ? "translate-x-1" : ""}`}
-                        />
-                        {includeRespondentInformation ? "Information On" : "Information Off"}
+                        <ChevronLeft className="size-4" />
+                        Previous Survey
                       </button>
-                    ) : null}
+                      <button
+                        type="button"
+                        onClick={() => setCurrentSurveyIndex((current) => Math.min(current + 1, questionnaires.length - 1))}
+                        disabled={currentSurveyIndex === questionnaires.length - 1}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                      >
+                        Next Survey
+                        <ChevronRight className="size-4" />
+                      </button>
+                    </div>
                   </div>
 
-                  {(respondentInformationRequired || includeRespondentInformation) ? (
-                    <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                      <label className="block">
-                        <span className="text-sm font-bold text-slate-700">
-                          Full Name {respondentInformationRequired ? <span className="text-red-500">*</span> : null}
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="flex size-10 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700">
+                          <UserRound className="size-5" />
                         </span>
-                        <input
-                          value={respondent.fullName ?? ""}
-                          onChange={(event) => updateRespondent("fullName", event.target.value)}
-                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                          placeholder="Enter your full name"
-                        />
-                      </label>
-
-                      <label className="block">
-                        <span className="text-sm font-bold text-slate-700">
-                          Email {respondentInformationRequired ? <span className="text-red-500">*</span> : null}
-                        </span>
-                        <input
-                          type="email"
-                          value={respondent.email ?? ""}
-                          onChange={(event) => updateRespondent("email", event.target.value)}
-                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                          placeholder="name@example.com"
-                        />
-                      </label>
-
-                      <div className="lg:col-span-2">
-                        <span className="text-sm font-bold text-slate-700">
-                          Role {respondentInformationRequired ? <span className="text-red-500">*</span> : null}
-                        </span>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {respondentRoles.map((role) => {
-                            const isSelected = respondent.role === role
-
-                            return (
-                              <button
-                                key={role}
-                                type="button"
-                                onClick={() => updateRespondent("role", role)}
-                                className={`rounded-full px-4 py-2 text-sm font-bold transition ${
-                                  isSelected ? "bg-slate-950 text-white" : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
-                                }`}
-                              >
-                                {role}
-                              </button>
-                            )
-                          })}
+                        <div>
+                          <h3 className="font-black text-slate-950">Respondent Details</h3>
+                          <p className="text-sm text-slate-500">
+                            {respondentInformationRequired ? "Required by this survey" : "Optional for this survey"}
+                          </p>
                         </div>
                       </div>
 
-                      <label className="block">
-                        <span className="text-sm font-bold text-slate-700">Office</span>
-                        <input
-                          value={respondent.office ?? ""}
-                          onChange={(event) => updateRespondent("office", event.target.value)}
-                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                          placeholder="Office or department"
-                        />
-                      </label>
-
-                      <label className="block">
-                        <span className="text-sm font-bold text-slate-700">Program</span>
-                        <input
-                          value={respondent.program ?? ""}
-                          onChange={(event) => updateRespondent("program", event.target.value)}
-                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                          placeholder="Program or unit"
-                        />
-                      </label>
+                      {!respondentInformationRequired ? (
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={currentDraft.includeRespondentInformation}
+                          onClick={() => setIncludeRespondentInformation(!currentDraft.includeRespondentInformation)}
+                          className={`inline-flex items-center gap-3 rounded-full px-3 py-2 text-sm font-bold transition ${
+                            currentDraft.includeRespondentInformation ? "bg-cyan-600 text-white" : "bg-slate-200 text-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`size-5 rounded-full bg-white transition ${
+                              currentDraft.includeRespondentInformation ? "translate-x-1" : ""
+                            }`}
+                          />
+                          {currentDraft.includeRespondentInformation ? "Information On" : "Information Off"}
+                        </button>
+                      ) : null}
                     </div>
-                  ) : null}
-                </div>
 
-                <div className="mt-6 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleContinueToChecklist}
-                    disabled={isQuestionnaireLoading || !questionnaire || (respondentInformationRequired && !respondentInformationComplete)}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-6 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                  >
-                    {isQuestionnaireLoading ? <Loader2 className="size-4 animate-spin" /> : <ClipboardList className="size-4" />}
-                    Continue to Step 2
-                  </button>
-                </div>
-              </section>
-            ) : (
-              <section className="rounded-3xl bg-white p-6 shadow-sm">
-                {isQuestionnaireLoading ? (
-                  <div className="flex min-h-96 items-center justify-center">
-                    <Loader2 className="size-8 animate-spin text-cyan-600" />
-                  </div>
-                ) : questionnaire ? (
-                  <div className="space-y-8">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <p className="text-sm font-bold uppercase tracking-wide text-cyan-700">Step 2 · {questionnaire.code}</p>
-                        <h2 className="mt-2 text-3xl font-black tracking-tight">{questionnaire.title}</h2>
-                        <p className="mt-3 text-sm leading-7 text-slate-600">{questionnaire.description}</p>
-                        {questionnaire.instruction ? (
-                          <div className="mt-4 rounded-2xl border border-cyan-100 bg-cyan-50 p-4 text-sm leading-7 text-cyan-900">
-                            {questionnaire.instruction}
+                    {(respondentInformationRequired || currentDraft.includeRespondentInformation) ? (
+                      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                        <label className="block">
+                          <span className="text-sm font-bold text-slate-700">
+                            Full Name {respondentInformationRequired ? <span className="text-red-500">*</span> : null}
+                          </span>
+                          <input
+                            value={currentDraft.respondent.fullName ?? ""}
+                            onChange={(event) => updateRespondent("fullName", event.target.value)}
+                            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+                            placeholder="Enter your full name"
+                          />
+                        </label>
+
+                        <label className="block">
+                          <span className="text-sm font-bold text-slate-700">
+                            Email {respondentInformationRequired ? <span className="text-red-500">*</span> : null}
+                          </span>
+                          <input
+                            type="email"
+                            value={currentDraft.respondent.email ?? ""}
+                            onChange={(event) => updateRespondent("email", event.target.value)}
+                            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+                            placeholder="name@example.com"
+                          />
+                        </label>
+
+                        <div className="lg:col-span-2">
+                          <span className="text-sm font-bold text-slate-700">
+                            Role {respondentInformationRequired ? <span className="text-red-500">*</span> : null}
+                          </span>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {respondentRoles.map((role) => {
+                              const isSelected = currentDraft.respondent.role === role
+
+                              return (
+                                <button
+                                  key={role}
+                                  type="button"
+                                  onClick={() => updateRespondent("role", role)}
+                                  className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+                                    isSelected
+                                      ? "bg-slate-950 text-white"
+                                      : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
+                                  }`}
+                                >
+                                  {role}
+                                </button>
+                              )
+                            })}
                           </div>
-                        ) : null}
-                      </div>
+                        </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setCurrentStep(1)}
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                      >
-                        <ChevronLeft className="size-4" />
-                        Back to Step 1
-                      </button>
+                        <label className="block">
+                          <span className="text-sm font-bold text-slate-700">Office</span>
+                          <input
+                            value={currentDraft.respondent.office ?? ""}
+                            onChange={(event) => updateRespondent("office", event.target.value)}
+                            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+                            placeholder="Office or department"
+                          />
+                        </label>
+
+                        <label className="block">
+                          <span className="text-sm font-bold text-slate-700">Program</span>
+                          <input
+                            value={currentDraft.respondent.program ?? ""}
+                            onChange={(event) => updateRespondent("program", event.target.value)}
+                            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+                            placeholder="Program or unit"
+                          />
+                        </label>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white">
+                    <div className="flex flex-col gap-2 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <h3 className="text-xl font-black text-slate-950">Checklist Evaluation</h3>
+                        <p className="mt-1 text-sm text-slate-500">
+                          {answeredCount}/{allItems.length || 0} answered
+                        </p>
+                      </div>
+                      <div className="inline-flex items-center gap-2 rounded-full bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-700">
+                        <ClipboardList className="size-4" />
+                        Survey {currentSurveyIndex + 1}
+                      </div>
                     </div>
 
-                    <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                    <div className="overflow-x-auto">
                       <table className="w-full min-w-full border-collapse text-left text-sm">
                         <thead className="bg-slate-100 text-slate-700">
                           <tr>
@@ -518,74 +597,76 @@ export function Survey() {
                           </tr>
                         </thead>
                         <tbody>
-                          {questionnaire.sections.map((section) => (
+                          {currentQuestionnaire.sections.map((section) => (
                             <FragmentSection
                               key={section.id}
                               sectionTitle={section.title}
                               items={section.items}
                               scale={scale}
-                              answers={answers}
+                              answers={currentDraft.answers}
                               updateAnswer={updateAnswer}
                             />
                           ))}
                         </tbody>
                       </table>
                     </div>
+                  </div>
 
-                    <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                      <label className="block">
-                        <span className="text-sm font-bold text-slate-700">
-                          {questionnaire.signatureLabel || "Respondent Signature"}
-                        </span>
-                        <input
-                          value={respondentSignature}
-                          onChange={(event) => setRespondentSignature(event.target.value)}
-                          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                          placeholder="Type your name as signature"
-                        />
-                      </label>
-
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={voluntaryConsent}
-                        onClick={() => setVoluntaryConsent((current) => !current)}
-                        className={`flex w-full gap-3 rounded-2xl p-4 text-left text-sm leading-6 transition ${
-                          voluntaryConsent ? "bg-cyan-50 text-cyan-950 ring-2 ring-cyan-200" : "bg-white text-slate-700 ring-1 ring-slate-200"
-                        }`}
-                      >
-                        <span
-                          className={`mt-1 flex size-5 shrink-0 items-center justify-center rounded-full border ${
-                            voluntaryConsent ? "border-cyan-600 bg-cyan-600 text-white" : "border-slate-300 bg-white"
-                          }`}
-                        >
-                          {voluntaryConsent ? <CheckCircle2 className="size-4" /> : null}
-                        </span>
-                        <span>
-                          {questionnaire.voluntaryNote ||
-                            "I voluntarily consent to submit this survey response for statistical evaluation."}
-                        </span>
-                      </button>
-                    </div>
+                  <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                    <label className="block">
+                      <span className="text-sm font-bold text-slate-700">
+                        {currentQuestionnaire.signatureLabel || "Respondent Signature"}
+                      </span>
+                      <input
+                        value={currentDraft.respondentSignature}
+                        onChange={(event) => setRespondentSignature(event.target.value)}
+                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+                        placeholder="Type your name as signature"
+                      />
+                    </label>
 
                     <button
-                      type="submit"
-                      disabled={!isComplete || isSubmitting}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-6 py-4 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      type="button"
+                      role="switch"
+                      aria-checked={currentDraft.voluntaryConsent}
+                      onClick={() => setVoluntaryConsent(!currentDraft.voluntaryConsent)}
+                      className={`flex w-full gap-3 rounded-2xl p-4 text-left text-sm leading-6 transition ${
+                        currentDraft.voluntaryConsent
+                          ? "bg-cyan-50 text-cyan-950 ring-2 ring-cyan-200"
+                          : "bg-white text-slate-700 ring-1 ring-slate-200"
+                      }`}
                     >
-                      {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                      Submit Survey Response
+                      <span
+                        className={`mt-1 flex size-5 shrink-0 items-center justify-center rounded-full border ${
+                          currentDraft.voluntaryConsent ? "border-cyan-600 bg-cyan-600 text-white" : "border-slate-300 bg-white"
+                        }`}
+                      >
+                        {currentDraft.voluntaryConsent ? <CheckCircle2 className="size-4" /> : null}
+                      </span>
+                      <span>
+                        {currentQuestionnaire.voluntaryNote ||
+                          "I voluntarily consent to submit this survey response for statistical evaluation."}
+                      </span>
                     </button>
                   </div>
-                ) : (
-                  <div className="flex min-h-96 flex-col items-center justify-center text-center">
-                    <CheckCircle2 className="size-12 text-slate-300" />
-                    <h2 className="mt-4 text-2xl font-black">No survey form available</h2>
-                    <p className="mt-2 text-sm text-slate-500">Please check the backend survey forms endpoint.</p>
-                  </div>
-                )}
-              </section>
-            )}
+
+                  <button
+                    type="submit"
+                    disabled={!isCurrentSurveyComplete || isSubmitting}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-6 py-4 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                    {currentSurveyIndex < questionnaires.length - 1 ? "Submit Survey and Continue" : "Submit Final Survey"}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex min-h-96 flex-col items-center justify-center text-center">
+                  <CheckCircle2 className="size-12 text-slate-300" />
+                  <h2 className="mt-4 text-2xl font-black">No survey form available</h2>
+                  <p className="mt-2 text-sm text-slate-500">Please check the backend survey forms endpoint.</p>
+                </div>
+              )}
+            </section>
           </form>
         )}
       </div>
@@ -593,18 +674,21 @@ export function Survey() {
   )
 }
 
-type StepCardProps = {
-  step: 1 | 2
+type SurveyStepCardProps = {
+  step: number
   title: string
   isActive: boolean
   isComplete: boolean
+  onClick: () => void
 }
 
-function StepCard({ step, title, isActive, isComplete }: StepCardProps) {
+function SurveyStepCard({ step, title, isActive, isComplete, onClick }: SurveyStepCardProps) {
   return (
-    <div
-      className={`rounded-2xl border p-4 transition ${
-        isActive ? "border-cyan-400 bg-cyan-50 shadow-sm" : "border-slate-200 bg-white"
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl border p-4 text-left transition ${
+        isActive ? "border-cyan-400 bg-cyan-50 shadow-sm" : "border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50/50"
       }`}
     >
       <div className="flex items-center gap-3">
@@ -616,11 +700,11 @@ function StepCard({ step, title, isActive, isComplete }: StepCardProps) {
           {isComplete ? <CheckCircle2 className="size-5" /> : step}
         </span>
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Step {step}</p>
-          <p className="font-black text-slate-950">{title}</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Survey {step}</p>
+          <p className="line-clamp-2 font-black text-slate-950">{title}</p>
         </div>
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -656,7 +740,9 @@ function FragmentSection({ sectionTitle, items, scale, answers, updateAnswer }: 
                   type="button"
                   onClick={() => updateAnswer(item.id, option.value)}
                   className={`mx-auto flex size-9 items-center justify-center rounded-full text-sm font-black transition ${
-                    isSelected ? "bg-cyan-600 text-white shadow-lg shadow-cyan-100" : "bg-slate-100 text-slate-700 hover:bg-cyan-100 hover:text-cyan-700"
+                    isSelected
+                      ? "bg-cyan-600 text-white shadow-lg shadow-cyan-100"
+                      : "bg-slate-100 text-slate-700 hover:bg-cyan-100 hover:text-cyan-700"
                   }`}
                   aria-label={`${item.statement}: ${option.label}`}
                   aria-pressed={isSelected}

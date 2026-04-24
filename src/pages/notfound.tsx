@@ -7,13 +7,16 @@ export function NotFound() {
   const navigate = useNavigate()
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-6 py-12 text-white">
-      <section className="w-full max-w-2xl rounded-3xl border border-white/10 bg-white/5 p-8 text-center shadow-2xl shadow-slate-950/40 backdrop-blur">
-        <Link to="/" className="mx-auto inline-flex items-center justify-center">
-          <img src={logo} alt="SurveyStat logo" className="h-16 w-auto" />
-        </Link>
+    <main className="relative flex min-h-screen items-center justify-center bg-slate-950 px-6 py-12 text-white">
+      <Link
+        to="/"
+        className="absolute left-6 top-6 inline-flex items-center justify-center rounded-2xl bg-white p-2 shadow-xl shadow-cyan-400/20"
+      >
+        <img src={logo} alt="SurveyStat logo" className="h-12 w-auto" />
+      </Link>
 
-        <div className="mx-auto mt-6 inline-flex rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm font-bold text-cyan-100">
+      <section className="w-full max-w-2xl rounded-3xl border border-white/10 bg-white/5 p-8 text-center shadow-2xl shadow-slate-950/40 backdrop-blur">
+        <div className="mx-auto inline-flex rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm font-bold text-cyan-100">
           404 Error
         </div>
 

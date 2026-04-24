@@ -21,6 +21,9 @@ export type SurveyFormCode = string
 export type SurveyForm = {
   id: string
   code: SurveyFormCode
+  surveySeriesId?: string | null
+  surveyStepNumber?: number
+  surveySeriesTitle?: string | null
   title: string
   description: string
   studyTitle?: string | null
@@ -173,6 +176,9 @@ export type CreateSurveySectionPayload = {
 
 export type CreateSurveyFormPayload = {
   code: SurveyFormCode
+  surveySeriesId?: string | null
+  surveyStepNumber?: number
+  surveySeriesTitle?: string | null
   title: string
   description?: string
   studyTitle?: string | null
@@ -187,6 +193,12 @@ export type CreateSurveyFormPayload = {
   respondentInformationRequired?: boolean
   isActive?: boolean
   sections?: CreateSurveySectionPayload[]
+}
+
+export type CreateSurveySeriesPayload = {
+  surveySeriesId?: string | null
+  surveySeriesTitle: string
+  forms: CreateSurveyFormPayload[]
 }
 
 export type StatisticsFilters = {
@@ -362,6 +374,9 @@ export const surveyStatService = {
 
   createSurveyForm: (payload: CreateSurveyFormPayload) =>
     surveystatApi.post<SurveyQuestionnaireForm>("/surveys/forms", payload),
+
+  createSurveySeries: (payload: CreateSurveySeriesPayload) =>
+    surveystatApi.post<SurveyQuestionnaireForm[]>("/surveys/series", payload),
 
   getQuestionnaireByFormCode: (formCode: SurveyFormCode) =>
     surveystatApi.get<SurveyQuestionnaireForm>(
