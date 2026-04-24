@@ -8,6 +8,7 @@ import {
 
 import * as LandingPageModule from "@/pages/landing";
 import * as NotFoundPageModule from "@/pages/notfound";
+import * as RespondentsPageModule from "@/pages/main/respondents";
 import * as StatisticPageModule from "@/pages/main/statistic";
 import * as SurveyPageModule from "@/pages/main/survey";
 
@@ -35,6 +36,10 @@ const Landing = resolveRouteComponent(
 const NotFound = resolveRouteComponent(
   NotFoundPageModule as RouteModule,
   "NotFound",
+);
+const Respondents = resolveRouteComponent(
+  RespondentsPageModule as RouteModule,
+  "Respondents",
 );
 const Statistic = resolveRouteComponent(
   StatisticPageModule as RouteModule,
@@ -66,6 +71,10 @@ export const router = createBrowserRouter([
       {
         path: "/survey",
         element: <Survey />,
+      },
+      {
+        path: "/respondents",
+        element: <Respondents />,
       },
       {
         path: "/statistic",

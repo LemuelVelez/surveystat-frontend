@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Copy,
   Loader2,
   Send,
   UserRound,
@@ -98,6 +99,17 @@ function getRequestedFormCodes(formsParam: string, formParam: string) {
     .split(",")
     .map((code) => code.trim())
     .filter(Boolean)
+}
+
+function getSurveyShareUrl(formCodes: string[]) {
+  const origin = typeof window !== "undefined" ? window.location.origin : ""
+  const codes = formCodes.map((code) => code.trim()).filter(Boolean)
+
+  if (codes.length === 0) {
+    return `${origin}/survey`
+  }
+
+  return `${origin}/survey?forms=${encodeURIComponent(codes.join(","))}`
 }
 
 export function Survey() {
@@ -287,6 +299,15 @@ export function Survey() {
     return currentDraft.respondent
   }
 
+  async function copyCurrentSurveyShareLink() {
+    try {
+      await navigator.clipboard.writeText(getSurveyShareUrl(selectedFormCodes))
+      toast.success("Survey share link copied.")
+    } catch {
+      toast.error("Unable to copy survey share link.")
+    }
+  }
+
   async function handleSubmitCurrentSurvey(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -375,6 +396,14 @@ export function Survey() {
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-100">
               {completedCount}/{questionnaires.length || 0} surveys submitted
             </div>
+            <button
+              type="button"
+              onClick={copyCurrentSurveyShareLink}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+            >
+              <Copy className="size-4" />
+              Share Survey
+            </button>
             <Link
               to="/statistic"
               className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-slate-100"

@@ -4,13 +4,16 @@ import {
   BarChart3,
   CheckCircle2,
   ClipboardCheck,
+  Copy,
   DatabaseZap,
   FilePlus2,
   Layers3,
+  Link2,
   Loader2,
   ListChecks,
   Plus,
   ShieldCheck,
+  UsersRound,
   X,
 } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
@@ -93,6 +96,17 @@ function getDefaultSections(stepNumber: number): CreateSurveyFormPayload["sectio
       ],
     },
   ]
+}
+
+function getSurveyShareUrl(formCodes: string[]) {
+  const origin = typeof window !== "undefined" ? window.location.origin : ""
+  const codes = formCodes.map((code) => code.trim()).filter(Boolean)
+
+  if (codes.length === 0) {
+    return `${origin}/survey`
+  }
+
+  return `${origin}/survey?forms=${encodeURIComponent(codes.join(","))}`
 }
 
 type DialogShellProps = {
@@ -238,6 +252,17 @@ export function Landing() {
     })
   }
 
+  async function copySurveyShareLink(formCodes: string[]) {
+    const shareUrl = getSurveyShareUrl(formCodes)
+
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      toast.success("Survey share link copied.")
+    } catch {
+      toast.error("Unable to copy survey share link.")
+    }
+  }
+
   async function toggleExistingSurveyRespondentInformation(form: SurveyForm) {
     const nextRequired = !form.respondentInformationRequired
     setUpdatingRespondentInfoFormId(form.id)
@@ -354,6 +379,13 @@ export function Landing() {
               Create New Survey
             </button>
             <Link
+              to="/respondents"
+              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-white"
+            >
+              <UsersRound className="size-4" />
+              Respondents
+            </Link>
+            <Link
               to="/statistic"
               className="rounded-full px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-white"
             >
@@ -390,6 +422,13 @@ export function Landing() {
             <Plus className="size-4" />
             Create New Survey
           </button>
+          <Link
+            to="/respondents"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white"
+          >
+            <UsersRound className="size-4" />
+            Respondents
+          </Link>
         </div>
 
         <div className="grid flex-1 items-center gap-12 py-16 lg:grid-cols-[1.05fr_0.95fr]">
@@ -443,6 +482,13 @@ export function Landing() {
                 <FilePlus2 className="size-4" />
                 Create New Survey
               </button>
+              <Link
+                to="/respondents"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+              >
+                <UsersRound className="size-4" />
+                Respondents
+              </Link>
             </div>
           </div>
 
@@ -534,14 +580,24 @@ export function Landing() {
               <p className="text-sm font-semibold text-slate-300">
                 {selectedExistingSurveys.length} selected survey{selectedExistingSurveys.length === 1 ? "" : "s"}
               </p>
-              <button
-                type="button"
-                onClick={startSelectedSurveys}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300"
-              >
-                <ArrowUpRight className="size-4" />
-                Start Selected
-              </button>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => copySurveyShareLink(selectedSurveyCodes)}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10"
+                >
+                  <Copy className="size-4" />
+                  Copy Share Link
+                </button>
+                <button
+                  type="button"
+                  onClick={startSelectedSurveys}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300"
+                >
+                  <ArrowUpRight className="size-4" />
+                  Start Selected
+                </button>
+              </div>
             </div>
           }
         >
@@ -606,6 +662,14 @@ export function Landing() {
                       >
                         {isSelected ? <CheckCircle2 className="size-5" /> : index + 1}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => copySurveyShareLink([form.code])}
+                        className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-200 transition hover:bg-white/15 hover:text-white"
+                      >
+                        <Link2 className="size-3.5" />
+                        Share
+                      </button>
                       <button
                         type="button"
                         role="switch"

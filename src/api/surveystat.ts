@@ -107,7 +107,59 @@ export type SurveyResponse = {
   updatedAt?: string | Date
 }
 
+export type SurveyAnswer = {
+  id: string
+  responseId: string
+  itemId: string
+  rating: LikertValue
+  createdAt?: string | Date
+  updatedAt?: string | Date
+}
+
+export type SurveyResponseSummary = SurveyResponse & {
+  formCode: SurveyFormCode
+  formTitle: string
+  respondentFullName?: string | null
+  respondentEmail?: string | null
+  respondentRole?: RespondentRole | null
+  respondentOffice?: string | null
+  respondentProgram?: string | null
+  answerCount: number
+  weightedMean: number
+  interpretation: string
+  meanRange: string
+}
+
+export type SurveyResponseAnswer = SurveyAnswer & {
+  formId: string
+  formCode: SurveyFormCode
+  formTitle: string
+  sectionId: string
+  sectionCode: string
+  sectionTitle: string
+  itemCode: string
+  itemStatement: string
+  itemSortOrder: number
+  interpretation: string
+  meanRange: string
+}
+
 export type RatingDistribution = Record<LikertValue, number>
+
+export type DescriptiveCalculationStep = {
+  label: string
+  formula: string
+  substitution: string
+  result: string
+}
+
+export type DescriptiveCalculation = {
+  basis: string
+  scale: string
+  weightedTotal: number
+  squaredDeviationsTotal: number
+  steps: DescriptiveCalculationStep[]
+}
 
 export type DescriptiveStatistics = {
   count: number
@@ -121,6 +173,7 @@ export type DescriptiveStatistics = {
   distribution: RatingDistribution
   interpretation: string
   meanRange: string
+  calculation?: DescriptiveCalculation
 }
 
 export type StatisticsSummary = DescriptiveStatistics & {
@@ -213,6 +266,15 @@ export type StatisticsFilters = {
   itemId?: string
   submittedFrom?: string
   submittedTo?: string
+}
+
+export type SurveyResponseFilters = {
+  formId?: string
+  formCode?: SurveyFormCode
+  respondentId?: string
+  submittedOnly?: boolean
+  limit?: number
+  offset?: number
 }
 
 const ENV = (import.meta as unknown as {
@@ -395,6 +457,14 @@ export const surveyStatService = {
 
   submitSurveyResponse: (payload: SubmitSurveyResponsePayload) =>
     surveystatApi.post<SurveyResponse>("/surveys/responses", payload),
+
+  listSurveyResponses: (filters: SurveyResponseFilters = {}) =>
+    surveystatApi.get<SurveyResponseSummary[]>(`/surveys/responses${buildQueryString(filters)}`),
+
+  getResponseAnswers: (responseId: string) =>
+    surveystatApi.get<SurveyResponseAnswer[]>(
+      `/surveys/responses/${encodeURIComponent(responseId)}/answers`,
+    ),
 
   getStatisticsSummary: (filters: StatisticsFilters = {}) =>
     surveystatApi.get<StatisticsSummary>(`/statistics/summary${buildQueryString(filters)}`),

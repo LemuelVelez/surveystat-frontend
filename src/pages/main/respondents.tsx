@@ -1,0 +1,421 @@
+import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { AgGridReact } from "ag-grid-react"
+import { AllCommunityModule, ModuleRegistry, type ColDef, type RowClickedEvent } from "ag-grid-community"
+import {
+  ArrowLeft,
+  ClipboardList,
+  Copy,
+  Loader2,
+  RefreshCcw,
+  Share2,
+  Table2,
+  UsersRound,
+} from "lucide-react"
+import { Link } from "react-router-dom"
+import { toast } from "sonner"
+
+import "ag-grid-community/styles/ag-grid.css"
+import "ag-grid-community/styles/ag-theme-quartz.css"
+
+import {
+  SurveyStatApiError,
+  surveyStatService,
+  type SurveyForm,
+  type SurveyResponseAnswer,
+  type SurveyResponseSummary,
+} from "@/api/surveystat"
+
+ModuleRegistry.registerModules([AllCommunityModule])
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof SurveyStatApiError || error instanceof Error) {
+    return error.message
+  }
+
+  return "Unable to load survey responses. Please try again."
+}
+
+function formatDate(value?: string | Date | null) {
+  if (!value) return "—"
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return "—"
+  }
+
+  return date.toLocaleString()
+}
+
+function formatNumber(value?: number | null, digits = 2) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "—"
+  }
+
+  return value.toLocaleString(undefined, {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+  })
+}
+
+function getSurveyShareUrl(formCodes: string[]) {
+  const origin = typeof window !== "undefined" ? window.location.origin : ""
+  const codes = formCodes.map((code) => code.trim()).filter(Boolean)
+
+  if (codes.length === 0) {
+    return `${origin}/survey`
+  }
+
+  return `${origin}/survey?forms=${encodeURIComponent(codes.join(","))}`
+}
+
+async function copyText(value: string, successMessage: string) {
+  await navigator.clipboard.writeText(value)
+  toast.success(successMessage)
+}
+
+export function Respondents() {
+  const [forms, setForms] = useState<SurveyForm[]>([])
+  const [selectedFormCode, setSelectedFormCode] = useState("")
+  const [responses, setResponses] = useState<SurveyResponseSummary[]>([])
+  const [answers, setAnswers] = useState<SurveyResponseAnswer[]>([])
+  const [selectedResponseId, setSelectedResponseId] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
+  const [isAnswersLoading, setIsAnswersLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
+
+  const selectedForm = useMemo(
+    () => forms.find((form) => form.code === selectedFormCode) ?? null,
+    [forms, selectedFormCode],
+  )
+  const selectedResponse = useMemo(
+    () => responses.find((response) => response.id === selectedResponseId) ?? null,
+    [responses, selectedResponseId],
+  )
+  const selectedShareUrl = useMemo(
+    () => getSurveyShareUrl(selectedFormCode ? [selectedFormCode] : forms.map((form) => form.code)),
+    [forms, selectedFormCode],
+  )
+  const responseCount = responses.length
+  const answerCount = responses.reduce((total, response) => total + (response.answerCount ?? 0), 0)
+  const respondentCount = new Set(responses.map((response) => response.respondentId).filter(Boolean)).size
+  const averageWeightedMean =
+    responses.length > 0
+      ? responses.reduce((total, response) => total + (response.weightedMean ?? 0), 0) / responses.length
+      : 0
+
+  const responseColumnDefs = useMemo<ColDef<SurveyResponseSummary>[]>(
+    () => [
+      { field: "formTitle", headerName: "Survey", minWidth: 260, flex: 1 },
+      { field: "respondentFullName", headerName: "Respondent", minWidth: 220, flex: 1 },
+      { field: "respondentEmail", headerName: "Email", minWidth: 220, flex: 1 },
+      { field: "respondentRole", headerName: "Role", width: 160 },
+      { field: "answerCount", headerName: "Answers", width: 120 },
+      { field: "weightedMean", headerName: "Weighted Mean", width: 160 },
+      { field: "interpretation", headerName: "Interpretation", minWidth: 170, flex: 1 },
+      {
+        field: "submittedAt",
+        headerName: "Submitted",
+        minWidth: 220,
+        flex: 1,
+        valueFormatter: (params) => formatDate(params.value),
+      },
+    ],
+    [],
+  )
+
+  const answerColumnDefs = useMemo<ColDef<SurveyResponseAnswer>[]>(
+    () => [
+      { field: "sectionTitle", headerName: "Section", minWidth: 220, flex: 1 },
+      { field: "itemCode", headerName: "Code", width: 140 },
+      { field: "itemStatement", headerName: "Checklist Item", minWidth: 420, flex: 2 },
+      { field: "rating", headerName: "Rating", width: 120 },
+      { field: "interpretation", headerName: "Interpretation", minWidth: 180, flex: 1 },
+    ],
+    [],
+  )
+
+  async function loadRespondentsPage(formCode = selectedFormCode) {
+    setIsLoading(true)
+    setErrorMessage("")
+
+    try {
+      const [surveyForms, surveyResponses] = await Promise.all([
+        surveyStatService.listSurveyForms(true),
+        surveyStatService.listSurveyResponses({
+          formCode: formCode || undefined,
+          submittedOnly: true,
+          limit: 500,
+        }),
+      ])
+
+      setForms(surveyForms)
+      setResponses(surveyResponses)
+      setSelectedResponseId((current) => (surveyResponses.some((response) => response.id === current) ? current : ""))
+      setAnswers([])
+    } catch (error) {
+      const message = getErrorMessage(error)
+      setErrorMessage(message)
+      toast.error(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function loadResponseAnswers(responseId: string) {
+    setSelectedResponseId(responseId)
+    setAnswers([])
+
+    if (!responseId) return
+
+    setIsAnswersLoading(true)
+
+    try {
+      const responseAnswers = await surveyStatService.getResponseAnswers(responseId)
+      setAnswers(responseAnswers)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setIsAnswersLoading(false)
+    }
+  }
+
+  function handleSurveySelect(formCode: string) {
+    setSelectedFormCode(formCode)
+    loadRespondentsPage(formCode)
+  }
+
+  function handleRowClicked(event: RowClickedEvent<SurveyResponseSummary>) {
+    if (event.data?.id) {
+      loadResponseAnswers(event.data.id)
+    }
+  }
+
+  useEffect(() => {
+    loadRespondentsPage("")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <main className="min-h-screen bg-slate-100 text-slate-950">
+      <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
+        <header className="mb-8 rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <Link to="/" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-cyan-200 hover:text-cyan-100">
+                <ArrowLeft className="size-4" />
+                Back to Home
+              </Link>
+              <div className="flex items-start gap-4">
+                <span className="flex size-12 items-center justify-center rounded-2xl bg-cyan-400 text-slate-950">
+                  <UsersRound className="size-6" />
+                </span>
+                <div>
+                  <h1 className="text-3xl font-black tracking-tight md:text-4xl">Respondents</h1>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                    Collect, filter, and review submitted responses from every survey form in one page.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => copyText(selectedShareUrl, "Survey share link copied.")}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300"
+              >
+                <Copy className="size-4" />
+                Copy Share Link
+              </button>
+              <button
+                type="button"
+                onClick={() => loadRespondentsPage(selectedFormCode)}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+              >
+                <RefreshCcw className="size-4" />
+                Refresh
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {errorMessage ? (
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        <section className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-black">Survey Response Filter</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                Choose which survey responses to view, or select all surveys for the complete collection.
+              </p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600">
+              {selectedForm?.title ?? "All survey responses"}
+            </span>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <SurveyFilterButton
+              title="All Surveys"
+              subtitle="View responses from every survey form"
+              isActive={!selectedFormCode}
+              icon={<ClipboardList className="size-5" />}
+              onClick={() => handleSurveySelect("")}
+            />
+
+            {forms.map((form) => (
+              <SurveyFilterButton
+                key={form.id}
+                title={form.title}
+                subtitle={form.code}
+                isActive={selectedFormCode === form.code}
+                icon={<Share2 className="size-5" />}
+                onClick={() => handleSurveySelect(form.code)}
+              />
+            ))}
+          </div>
+        </section>
+
+        <section className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <SummaryCard label="Responses" value={responseCount} />
+          <SummaryCard label="Respondents" value={respondentCount} />
+          <SummaryCard label="Answers" value={answerCount} />
+          <SummaryCard label="Average Weighted Mean" value={formatNumber(averageWeightedMean)} />
+        </section>
+
+        {isLoading ? (
+          <div className="flex min-h-96 items-center justify-center rounded-3xl bg-white shadow-sm">
+            <Loader2 className="size-8 animate-spin text-cyan-600" />
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <GridCard title="Survey Responses" rows={responses.length}>
+              <div className="ag-theme-quartz h-96 w-full">
+                <AgGridReact
+                  rowData={responses}
+                  columnDefs={responseColumnDefs}
+                  defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                  pagination
+                  paginationPageSize={10}
+                  animateRows
+                  rowSelection="single"
+                  onRowClicked={handleRowClicked}
+                />
+              </div>
+            </GridCard>
+
+            <GridCard title={selectedResponse ? `Response Result · ${selectedResponse.formTitle}` : "Response Result"} rows={answers.length}>
+              {selectedResponse ? (
+                <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <SummaryCard label="Respondent" value={selectedResponse.respondentFullName || "Anonymous"} />
+                  <SummaryCard label="Weighted Mean" value={formatNumber(selectedResponse.weightedMean)} />
+                  <SummaryCard label="Interpretation" value={selectedResponse.interpretation || "No data"} />
+                  <SummaryCard label="Submitted" value={formatDate(selectedResponse.submittedAt)} />
+                </div>
+              ) : (
+                <div className="mb-4 rounded-2xl bg-slate-50 p-5 text-sm font-semibold text-slate-500">
+                  Select one response row above to view its answers and result.
+                </div>
+              )}
+
+              {isAnswersLoading ? (
+                <div className="flex min-h-60 items-center justify-center rounded-2xl bg-slate-50">
+                  <Loader2 className="size-8 animate-spin text-cyan-600" />
+                </div>
+              ) : (
+                <div className="ag-theme-quartz h-96 w-full">
+                  <AgGridReact
+                    rowData={answers}
+                    columnDefs={answerColumnDefs}
+                    defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                    pagination
+                    paginationPageSize={10}
+                    animateRows
+                  />
+                </div>
+              )}
+            </GridCard>
+          </div>
+        )}
+      </div>
+    </main>
+  )
+}
+
+type SurveyFilterButtonProps = {
+  title: string
+  subtitle: string
+  isActive: boolean
+  icon: ReactNode
+  onClick: () => void
+}
+
+function SurveyFilterButton({ title, subtitle, isActive, icon, onClick }: SurveyFilterButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl border p-4 text-left transition ${
+        isActive ? "border-cyan-400 bg-cyan-50 shadow-sm" : "border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50/50"
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
+            isActive ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          {icon}
+        </span>
+        <span>
+          <span className="line-clamp-2 block font-black text-slate-950">{title}</span>
+          <span className="mt-1 line-clamp-1 block text-sm font-semibold text-slate-500">{subtitle}</span>
+        </span>
+      </div>
+    </button>
+  )
+}
+
+type SummaryCardProps = {
+  label: string
+  value: string | number
+}
+
+function SummaryCard({ label, value }: SummaryCardProps) {
+  return (
+    <div className="rounded-3xl bg-white p-6 shadow-sm">
+      <p className="text-sm font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-3 wrap-break-word text-2xl font-black tracking-tight text-slate-950">{value}</p>
+    </div>
+  )
+}
+
+type GridCardProps = {
+  title: string
+  rows: number
+  children: ReactNode
+}
+
+function GridCard({ title, rows, children }: GridCardProps) {
+  return (
+    <section className="rounded-3xl bg-white p-6 shadow-sm">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
+            <Table2 className="size-5" />
+          </span>
+          <h2 className="text-xl font-black">{title}</h2>
+        </div>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600">{rows} rows</span>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+export default Respondents
