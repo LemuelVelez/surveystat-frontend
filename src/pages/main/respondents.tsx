@@ -5,9 +5,12 @@ import {
   ArrowLeft,
   ClipboardList,
   Copy,
+  Eye,
   Loader2,
+  Mail,
   RefreshCcw,
   Share2,
+  Trash2,
   Table2,
   UsersRound,
 } from "lucide-react"
@@ -24,6 +27,7 @@ import {
   type SurveyResponseAnswer,
   type SurveyResponseSummary,
 } from "@/api/surveystat"
+import Preview, { type PreviewColumn, type PreviewSummaryItem } from "@/components/preview"
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
@@ -82,6 +86,10 @@ export function Respondents() {
   const [selectedResponseId, setSelectedResponseId] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isAnswersLoading, setIsAnswersLoading] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [pendingDeleteResponse, setPendingDeleteResponse] = useState<SurveyResponseSummary | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isResending, setIsResending] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
 
   const selectedForm = useMemo(
@@ -135,6 +143,35 @@ export function Respondents() {
     [],
   )
 
+  const responsePreviewColumns = useMemo<PreviewColumn<SurveyResponseAnswer>[]>(
+    () => [
+      { key: "sectionTitle", header: "Section" },
+      { key: "itemCode", header: "Code" },
+      { key: "itemStatement", header: "Checklist Item" },
+      { key: "rating", header: "Rating" },
+      { key: "interpretation", header: "Interpretation" },
+      { key: "meanRange", header: "Mean Range" },
+    ],
+    [],
+  )
+
+  const responsePreviewSummary = useMemo<PreviewSummaryItem[]>(
+    () =>
+      selectedResponse
+        ? [
+            { label: "Survey", value: selectedResponse.formTitle },
+            { label: "Respondent", value: selectedResponse.respondentFullName || "Anonymous" },
+            { label: "Email", value: selectedResponse.respondentEmail || "—" },
+            { label: "Role", value: selectedResponse.respondentRole || "—" },
+            { label: "Answers", value: selectedResponse.answerCount },
+            { label: "Weighted Mean", value: formatNumber(selectedResponse.weightedMean) },
+            { label: "Interpretation", value: selectedResponse.interpretation || "No data" },
+            { label: "Submitted", value: formatDate(selectedResponse.submittedAt) },
+          ]
+        : [],
+    [selectedResponse],
+  )
+
   async function loadRespondentsPage(formCode = selectedFormCode) {
     setIsLoading(true)
     setErrorMessage("")
@@ -162,21 +199,83 @@ export function Respondents() {
     }
   }
 
-  async function loadResponseAnswers(responseId: string) {
+  async function loadResponseAnswers(responseId: string): Promise<SurveyResponseAnswer[]> {
     setSelectedResponseId(responseId)
     setAnswers([])
 
-    if (!responseId) return
+    if (!responseId) {
+      return []
+    }
 
     setIsAnswersLoading(true)
 
     try {
-      const responseAnswers = await surveyStatService.getResponseAnswers(responseId)
+      const responseAnswers = (await surveyStatService.getResponseAnswers(responseId)) ?? []
       setAnswers(responseAnswers)
+      return responseAnswers
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+      return []
+    } finally {
+      setIsAnswersLoading(false)
+    }
+  }
+
+  async function ensureSelectedAnswers(): Promise<SurveyResponseAnswer[]> {
+    if (!selectedResponse) {
+      toast.error("Please select one response first.")
+      return []
+    }
+
+    if (answers.length > 0 && selectedResponseId === selectedResponse.id) {
+      return answers
+    }
+
+    return loadResponseAnswers(selectedResponse.id)
+  }
+
+  async function openResponsePreview() {
+    const loadedAnswers = await ensureSelectedAnswers()
+
+    if (loadedAnswers.length > 0 || selectedResponse) {
+      setIsPreviewOpen(true)
+    }
+  }
+
+  async function resendResponseReviewEmail() {
+    if (!selectedResponse) {
+      toast.error("Please select one response first.")
+      return
+    }
+
+    setIsResending(true)
+
+    try {
+      await surveyStatService.resendResponseReviewEmail(selectedResponse.id)
+      toast.success("Response review email resent successfully.")
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
-      setIsAnswersLoading(false)
+      setIsResending(false)
+    }
+  }
+
+  async function confirmDeleteResponse() {
+    if (!pendingDeleteResponse) return
+
+    setIsDeleting(true)
+
+    try {
+      await surveyStatService.deleteSurveyResponse(pendingDeleteResponse.id)
+      toast.success("Survey response deleted successfully.")
+      setPendingDeleteResponse(null)
+      setSelectedResponseId("")
+      setAnswers([])
+      await loadRespondentsPage(selectedFormCode)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -311,11 +410,62 @@ export function Respondents() {
 
             <GridCard title={selectedResponse ? `Response Result · ${selectedResponse.formTitle}` : "Response Result"} rows={answers.length}>
               {selectedResponse ? (
-                <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <SummaryCard label="Respondent" value={selectedResponse.respondentFullName || "Anonymous"} />
-                  <SummaryCard label="Weighted Mean" value={formatNumber(selectedResponse.weightedMean)} />
-                  <SummaryCard label="Interpretation" value={selectedResponse.interpretation || "No data"} />
-                  <SummaryCard label="Submitted" value={formatDate(selectedResponse.submittedAt)} />
+                <div className="mb-4 space-y-4">
+                  <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-sm font-black text-slate-950">{selectedResponse.respondentFullName || "Anonymous respondent"}</p>
+                      <p className="mt-1 text-sm text-slate-500">{selectedResponse.respondentEmail || "No respondent email"}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={openResponsePreview}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500"
+                      >
+                        <Eye className="size-4" />
+                        Preview
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isResending || !selectedResponse.respondentEmail}
+                        onClick={resendResponseReviewEmail}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isResending ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
+                        Resend Review
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDeleteResponse(selectedResponse)}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700 transition hover:bg-red-100"
+                      >
+                        <Trash2 className="size-4" />
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <SummaryCard label="Respondent" value={selectedResponse.respondentFullName || "Anonymous"} />
+                    <SummaryCard label="Weighted Mean" value={formatNumber(selectedResponse.weightedMean)} />
+                    <SummaryCard label="Interpretation" value={selectedResponse.interpretation || "No data"} />
+                    <SummaryCard label="Submitted" value={formatDate(selectedResponse.submittedAt)} />
+                  </div>
+
+                  {selectedResponse.respondentSignature ? (
+                    <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
+                      <p className="text-xs font-black uppercase tracking-wide text-cyan-700">Respondent Signature</p>
+                      {/^https?:\/\//i.test(selectedResponse.respondentSignature) ? (
+                        <img
+                          src={selectedResponse.respondentSignature}
+                          alt="Respondent signature"
+                          className="mt-3 max-h-32 rounded-xl border border-cyan-200 bg-white p-3"
+                        />
+                      ) : (
+                        <p className="mt-2 text-xl font-black text-slate-950">{selectedResponse.respondentSignature}</p>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="mb-4 rounded-2xl bg-slate-50 p-5 text-sm font-semibold text-slate-500">
@@ -343,6 +493,60 @@ export function Respondents() {
           </div>
         )}
       </div>
+
+      <Preview
+        isOpen={isPreviewOpen}
+        title={selectedResponse ? `Response Preview · ${selectedResponse.formTitle}` : "Response Preview"}
+        subtitle={selectedResponse ? `${selectedResponse.respondentFullName || "Anonymous"} · ${formatDate(selectedResponse.submittedAt)}` : undefined}
+        fileName={selectedResponse ? `${selectedResponse.formCode}-${selectedResponse.respondentFullName || "response"}` : "survey-response"}
+        summary={responsePreviewSummary}
+        rows={answers}
+        columns={responsePreviewColumns}
+        isLoading={isAnswersLoading}
+        onClose={() => setIsPreviewOpen(false)}
+      />
+
+      {pendingDeleteResponse ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl shadow-slate-950/30">
+            <div className="flex items-start gap-4">
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-700">
+                <Trash2 className="size-6" />
+              </span>
+              <div>
+                <h2 className="text-2xl font-black tracking-tight text-slate-950">Delete survey response?</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  This will remove the selected response and its answers from SurveyStat.
+                </p>
+                <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm">
+                  <p className="font-black text-slate-950">{pendingDeleteResponse.respondentFullName || "Anonymous respondent"}</p>
+                  <p className="mt-1 text-slate-500">{pendingDeleteResponse.formTitle}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteResponse(null)}
+                disabled={isDeleting}
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteResponse}
+                disabled={isDeleting}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-black text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-red-300"
+              >
+                {isDeleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                Delete Response
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   )
 }

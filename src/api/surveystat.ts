@@ -92,6 +92,8 @@ export type SubmitSurveyResponsePayload = {
   respondentId?: string | null
   respondent?: CreateRespondentPayload | null
   respondentSignature?: string | null
+  respondentSignatureImage?: string | null
+  respondentSignatureFileName?: string | null
   voluntaryConsent: boolean
   answers: SubmitSurveyAnswerPayload[]
 }
@@ -101,6 +103,8 @@ export type SurveyResponse = {
   formId: string
   respondentId?: string | null
   respondentSignature?: string | null
+  respondentSignatureImage?: string | null
+  respondentSignatureFileName?: string | null
   voluntaryConsent: boolean
   submittedAt?: string | Date | null
   createdAt?: string | Date
@@ -465,6 +469,14 @@ export const surveyStatService = {
     surveystatApi.get<SurveyResponseAnswer[]>(
       `/surveys/responses/${encodeURIComponent(responseId)}/answers`,
     ),
+
+  resendResponseReviewEmail: (responseId: string) =>
+    surveystatApi.post<{ response: SurveyResponseSummary; answers: SurveyResponseAnswer[] }>(
+      `/surveys/responses/${encodeURIComponent(responseId)}/resend-review`,
+    ),
+
+  deleteSurveyResponse: (responseId: string) =>
+    surveystatApi.del<SurveyResponse>(`/surveys/responses/${encodeURIComponent(responseId)}`),
 
   getStatisticsSummary: (filters: StatisticsFilters = {}) =>
     surveystatApi.get<StatisticsSummary>(`/statistics/summary${buildQueryString(filters)}`),

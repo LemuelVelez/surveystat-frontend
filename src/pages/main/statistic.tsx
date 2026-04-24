@@ -7,6 +7,7 @@ import {
   BookOpenCheck,
   Calculator,
   CheckCircle2,
+  Eye,
   Loader2,
   RefreshCcw,
   Table2,
@@ -28,12 +29,24 @@ import {
   type SurveyItemStatistics,
   type SurveySectionStatistics,
 } from "@/api/surveystat"
+import Preview, { type PreviewColumn, type PreviewSummaryItem } from "@/components/preview"
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
 type DistributionDatum = {
   rating: string
   count: number
+}
+
+type StatisticsPreviewRow = {
+  sectionTitle: string
+  itemCode: string
+  itemStatement: string
+  count: number
+  weightedMean: number
+  standardDeviation: number
+  interpretation: string
+  meanRange: string
 }
 
 type PlotlyChartProps = {
@@ -234,6 +247,7 @@ export function Statistic() {
   const [isFormsLoading, setIsFormsLoading] = useState(true)
   const [isComputing, setIsComputing] = useState(false)
   const [hasComputed, setHasComputed] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
 
   const distributionData = useMemo(() => toDistributionData(summary.distribution), [summary.distribution])
@@ -241,6 +255,66 @@ export function Statistic() {
   const formChartMeans = useMemo(() => formStatistics.map((item) => item.weightedMean), [formStatistics])
   const selectedFormTitle = useMemo(() => getSelectedFormTitle(forms, selectedFormCode), [forms, selectedFormCode])
   const calculationSteps = summary.calculation?.steps ?? createFallbackCalculation(summary)
+
+  const statisticsPreviewColumns = useMemo<PreviewColumn<StatisticsPreviewRow>[]>(
+    () => [
+      { key: "sectionTitle", header: "Section" },
+      { key: "itemCode", header: "Code" },
+      { key: "itemStatement", header: "Checklist Item" },
+      { key: "count", header: "Answers" },
+      { key: "weightedMean", header: "Weighted Mean" },
+      { key: "standardDeviation", header: "Std. Dev." },
+      { key: "interpretation", header: "Interpretation" },
+      { key: "meanRange", header: "Mean Range" },
+    ],
+    [],
+  )
+
+  const statisticsPreviewSummary = useMemo<PreviewSummaryItem[]>(
+    () => [
+      { label: "Survey", value: selectedFormTitle },
+      { label: "Responses", value: summary.responseCount },
+      { label: "Answer Count", value: summary.answerCount },
+      { label: "Weighted Mean", value: formatNumber(summary.weightedMean) },
+      { label: "Standard Deviation", value: formatNumber(summary.standardDeviation) },
+      { label: "Variance", value: formatNumber(summary.variance) },
+      { label: "Interpretation", value: summary.interpretation },
+      { label: "Mean Range", value: summary.meanRange },
+    ],
+    [selectedFormTitle, summary],
+  )
+
+  const calculationPreviewRows = useMemo<StatisticsPreviewRow[]>(
+    () =>
+      calculationSteps.map((step, index) => ({
+        sectionTitle: "Detailed Solution",
+        itemCode: `Step ${index + 1}`,
+        itemStatement: `${step.label} · ${step.formula} · ${step.substitution}`,
+        count: summary.answerCount,
+        weightedMean: summary.weightedMean,
+        standardDeviation: summary.standardDeviation,
+        interpretation: step.result,
+        meanRange: summary.meanRange,
+      })),
+    [calculationSteps, summary],
+  )
+
+  const statisticsPreviewRows = useMemo<StatisticsPreviewRow[]>(
+    () =>
+      itemStatistics.length > 0
+        ? itemStatistics.map((item) => ({
+            sectionTitle: item.sectionTitle,
+            itemCode: item.itemCode,
+            itemStatement: item.itemStatement,
+            count: item.count,
+            weightedMean: item.weightedMean,
+            standardDeviation: item.standardDeviation,
+            interpretation: item.interpretation,
+            meanRange: item.meanRange,
+          }))
+        : calculationPreviewRows,
+    [calculationPreviewRows, itemStatistics],
+  )
 
   const sectionColumnDefs = useMemo<ColDef<SurveySectionStatistics>[]>(
     () => [
@@ -363,6 +437,15 @@ export function Statistic() {
               >
                 {isComputing ? <Loader2 className="size-4 animate-spin" /> : <Calculator className="size-4" />}
                 Compute Selected Survey
+              </button>
+              <button
+                type="button"
+                disabled={!hasComputed || isComputing}
+                onClick={() => setIsPreviewOpen(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
+              >
+                <Eye className="size-4" />
+                Preview Result
               </button>
               <button
                 type="button"
@@ -560,6 +643,38 @@ export function Statistic() {
           </div>
         )}
       </div>
+
+      <Preview
+        isOpen={isPreviewOpen}
+        title={`Statistics Preview · ${selectedFormTitle}`}
+        subtitle="Detailed statistical solution, result, and item-level statistics"
+        fileName={`${selectedFormCode || "statistics"}-survey-statistics`}
+        summary={statisticsPreviewSummary}
+        rows={statisticsPreviewRows}
+        columns={statisticsPreviewColumns}
+        isLoading={isComputing}
+        onClose={() => setIsPreviewOpen(false)}
+      >
+        <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
+          <p className="text-sm font-black uppercase tracking-wide text-cyan-700">Detailed Solution</p>
+          <div className="mt-3 grid gap-3">
+            {calculationSteps.map((step, index) => (
+              <div key={`${step.label}-${index}`} className="rounded-xl bg-white p-3">
+                <p className="text-sm font-black text-slate-950">Step {index + 1}: {step.label}</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  <span className="font-bold">Formula:</span> {step.formula}
+                </p>
+                <p className="text-sm leading-6 text-slate-600">
+                  <span className="font-bold">Substitution:</span> {step.substitution}
+                </p>
+                <p className="text-sm leading-6 text-slate-600">
+                  <span className="font-bold">Result:</span> {step.result}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Preview>
     </main>
   )
 }

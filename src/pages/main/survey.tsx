@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent, type ReactNode, type SyntheticEvent } from "react"
 import {
   ArrowLeft,
   CheckCircle2,
@@ -6,8 +6,14 @@ import {
   ChevronRight,
   ClipboardList,
   Copy,
+  Eraser,
+  ImagePlus,
   Loader2,
+  PenLine,
+  ScanLine,
   Send,
+  Type,
+  Upload,
   UserRound,
 } from "lucide-react"
 import { Link, useSearchParams } from "react-router-dom"
@@ -33,11 +39,16 @@ const defaultScale = [
 
 const respondentRoles = ["Student", "Faculty", "QA Personnel", "Administrator", "Other"]
 
+type SignatureMode = "type" | "draw" | "scan"
+
 type SurveyDraft = {
   answers: Record<string, LikertValue>
   respondent: CreateRespondentPayload
   includeRespondentInformation: boolean
   respondentSignature: string
+  respondentSignatureImage: string
+  respondentSignatureFileName: string
+  signatureMode: SignatureMode
   voluntaryConsent: boolean
   isSubmitted: boolean
 }
@@ -87,6 +98,9 @@ function getInitialDraft(includeRespondentInformation = true): SurveyDraft {
     respondent: getInitialRespondent(),
     includeRespondentInformation,
     respondentSignature: "",
+    respondentSignatureImage: "",
+    respondentSignatureFileName: "",
+    signatureMode: "type",
     voluntaryConsent: false,
     isSubmitted: false,
   }
@@ -326,6 +340,23 @@ export function Survey() {
     }))
   }
 
+  function setRespondentSignatureImage(value: string, filename = "respondent-signature.png") {
+    updateCurrentDraft((current) => ({
+      ...current,
+      respondentSignatureImage: value,
+      respondentSignatureFileName: value ? filename : "",
+      isSubmitted: false,
+    }))
+  }
+
+  function setSignatureMode(value: SignatureMode) {
+    updateCurrentDraft((current) => ({
+      ...current,
+      signatureMode: value,
+      isSubmitted: false,
+    }))
+  }
+
   function setVoluntaryConsent(value: boolean) {
     updateCurrentDraft((current) => ({
       ...current,
@@ -391,6 +422,8 @@ export function Survey() {
         formCode: currentQuestionnaire.code,
         respondent: getRespondentPayload(),
         respondentSignature: currentDraft.respondentSignature,
+        respondentSignatureImage: currentDraft.respondentSignatureImage || null,
+        respondentSignatureFileName: currentDraft.respondentSignatureFileName || null,
         voluntaryConsent: currentDraft.voluntaryConsent,
         answers: payloadAnswers,
       })
@@ -687,17 +720,16 @@ export function Survey() {
                   </div>
 
                   <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                    <label className="block">
-                      <span className="text-sm font-bold text-slate-700">
-                        {currentQuestionnaire.signatureLabel || "Respondent Signature"}
-                      </span>
-                      <input
-                        value={currentDraft.respondentSignature}
-                        onChange={(event) => setRespondentSignature(event.target.value)}
-                        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                        placeholder="Type your name as signature"
-                      />
-                    </label>
+                    <SignatureCapture
+                      label={currentQuestionnaire.signatureLabel || "Respondent Signature"}
+                      mode={currentDraft.signatureMode}
+                      typedSignature={currentDraft.respondentSignature}
+                      imageSignature={currentDraft.respondentSignatureImage}
+                      imageFilename={currentDraft.respondentSignatureFileName}
+                      onModeChange={setSignatureMode}
+                      onTypedSignatureChange={setRespondentSignature}
+                      onImageSignatureChange={setRespondentSignatureImage}
+                    />
 
                     <button
                       type="button"
@@ -745,6 +777,277 @@ export function Survey() {
         )}
       </div>
     </main>
+  )
+}
+
+type SignatureCaptureProps = {
+  label: string
+  mode: SignatureMode
+  typedSignature: string
+  imageSignature: string
+  imageFilename: string
+  onModeChange: (mode: SignatureMode) => void
+  onTypedSignatureChange: (value: string) => void
+  onImageSignatureChange: (value: string, filename?: string) => void
+}
+
+function SignatureCapture({
+  label,
+  mode,
+  typedSignature,
+  imageSignature,
+  imageFilename,
+  onModeChange,
+  onTypedSignatureChange,
+  onImageSignatureChange,
+}: SignatureCaptureProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const isDrawingRef = useRef(false)
+
+  useEffect(() => {
+    if (mode !== "draw") return
+
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const context = canvas.getContext("2d")
+    if (!context) return
+
+    const pixelRatio = window.devicePixelRatio || 1
+    const rect = canvas.getBoundingClientRect()
+    const width = Math.max(rect.width, 320)
+    const height = 190
+
+    canvas.width = width * pixelRatio
+    canvas.height = height * pixelRatio
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+    context.fillStyle = "#ffffff"
+    context.fillRect(0, 0, width, height)
+    context.lineWidth = 3
+    context.lineCap = "round"
+    context.lineJoin = "round"
+    context.strokeStyle = "#0f172a"
+  }, [mode])
+
+  function getCanvasPoint(event: PointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current
+
+    if (!canvas) {
+      return { x: 0, y: 0 }
+    }
+
+    const rect = canvas.getBoundingClientRect()
+
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    }
+  }
+
+  function handleDrawStart(event: PointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current
+    const context = canvas?.getContext("2d")
+
+    if (!canvas || !context) return
+
+    const point = getCanvasPoint(event)
+    isDrawingRef.current = true
+    canvas.setPointerCapture(event.pointerId)
+    context.beginPath()
+    context.moveTo(point.x, point.y)
+  }
+
+  function handleDrawMove(event: PointerEvent<HTMLCanvasElement>) {
+    if (!isDrawingRef.current) return
+
+    const context = canvasRef.current?.getContext("2d")
+    if (!context) return
+
+    const point = getCanvasPoint(event)
+    context.lineTo(point.x, point.y)
+    context.stroke()
+  }
+
+  function handleDrawEnd(event: PointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current
+
+    if (!canvas) return
+
+    isDrawingRef.current = false
+
+    if (canvas.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId)
+    }
+
+    onImageSignatureChange(canvas.toDataURL("image/png"), "drawn-respondent-signature.png")
+  }
+
+  function clearDrawnSignature() {
+    const canvas = canvasRef.current
+    const context = canvas?.getContext("2d")
+
+    if (!canvas || !context) return
+
+    const rect = canvas.getBoundingClientRect()
+    context.fillStyle = "#ffffff"
+    context.fillRect(0, 0, rect.width, rect.height)
+    onImageSignatureChange("", "")
+  }
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+
+    if (!file) return
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file for the scanned signature.")
+      event.target.value = ""
+      return
+    }
+
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      onImageSignatureChange(String(reader.result ?? ""), file.name)
+    }
+
+    reader.onerror = () => {
+      toast.error("Unable to read the selected signature image.")
+    }
+
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <span className="text-sm font-black text-slate-700">{label}</span>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            Optional: type your name, draw your signature, or scan/upload a signature image.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <SignatureModeButton
+            label="Type"
+            icon={<Type className="size-4" />}
+            isActive={mode === "type"}
+            onClick={() => onModeChange("type")}
+          />
+          <SignatureModeButton
+            label="Draw"
+            icon={<PenLine className="size-4" />}
+            isActive={mode === "draw"}
+            onClick={() => onModeChange("draw")}
+          />
+          <SignatureModeButton
+            label="Scan"
+            icon={<ScanLine className="size-4" />}
+            isActive={mode === "scan"}
+            onClick={() => onModeChange("scan")}
+          />
+        </div>
+      </div>
+
+      {mode === "type" ? (
+        <label className="block">
+          <span className="text-xs font-black uppercase tracking-wide text-slate-500">Typed Signature</span>
+          <input
+            value={typedSignature}
+            onChange={(event) => onTypedSignatureChange(event.target.value)}
+            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+            placeholder="Type your name as signature"
+          />
+        </label>
+      ) : null}
+
+      {mode === "draw" ? (
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-3">
+            <canvas
+              ref={canvasRef}
+              className="h-48 w-full touch-none rounded-xl bg-white shadow-inner"
+              onPointerDown={handleDrawStart}
+              onPointerMove={handleDrawMove}
+              onPointerUp={handleDrawEnd}
+              onPointerCancel={handleDrawEnd}
+              aria-label="Draw respondent signature"
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-slate-500">Draw inside the white box. The image will be uploaded to Amazon S3 on submit.</p>
+            <button
+              type="button"
+              onClick={clearDrawnSignature}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-100"
+            >
+              <Eraser className="size-4" />
+              Clear Drawing
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {mode === "scan" ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
+                <ImagePlus className="size-5" />
+              </span>
+              <div>
+                <p className="font-black text-slate-950">Upload scanned signature</p>
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                  Select a captured signature image from your device.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800"
+            >
+              <Upload className="size-4" />
+              Choose Image
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {imageSignature ? (
+        <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
+          <p className="text-xs font-black uppercase tracking-wide text-cyan-700">
+            Signature image ready {imageFilename ? `· ${imageFilename}` : ""}
+          </p>
+          <img src={imageSignature} alt="Respondent signature preview" className="mt-3 max-h-40 rounded-xl border border-cyan-200 bg-white p-3" />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+type SignatureModeButtonProps = {
+  label: string
+  icon: ReactNode
+  isActive: boolean
+  onClick: () => void
+}
+
+function SignatureModeButton({ label, icon, isActive, onClick }: SignatureModeButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition ${
+        isActive ? "bg-cyan-600 text-white shadow-sm" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
   )
 }
 
