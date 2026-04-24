@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type SyntheticEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react"
 import {
   ArrowLeft,
   CheckCircle2,
@@ -128,6 +128,9 @@ export function Survey() {
   const [isQuestionnaireLoading, setIsQuestionnaireLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
+  const [showStickyScale, setShowStickyScale] = useState(false)
+  const checklistTableRef = useRef<HTMLDivElement>(null)
+  const checklistScaleHeaderRef = useRef<HTMLTableSectionElement>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -232,6 +235,46 @@ export function Survey() {
     currentDraft.voluntaryConsent &&
     (!respondentInformationRequired || respondentInformationComplete)
   const completedCount = questionnaires.filter((questionnaire) => drafts[questionnaire.code]?.isSubmitted).length
+
+  useEffect(() => {
+    if (!currentQuestionnaire) {
+      setShowStickyScale(false)
+      return
+    }
+
+    let animationFrameId = 0
+
+    function updateStickyScaleVisibility() {
+      window.cancelAnimationFrame(animationFrameId)
+
+      animationFrameId = window.requestAnimationFrame(() => {
+        const checklistTable = checklistTableRef.current
+        const scaleHeader = checklistScaleHeaderRef.current
+
+        if (!checklistTable || !scaleHeader) {
+          setShowStickyScale(false)
+          return
+        }
+
+        const checklistRect = checklistTable.getBoundingClientRect()
+        const scaleHeaderRect = scaleHeader.getBoundingClientRect()
+        const isOriginalScaleHidden = scaleHeaderRect.bottom <= 0
+        const isChecklistStillVisible = checklistRect.top < window.innerHeight && checklistRect.bottom > 72
+
+        setShowStickyScale(isOriginalScaleHidden && isChecklistStillVisible)
+      })
+    }
+
+    updateStickyScaleVisibility()
+    window.addEventListener("scroll", updateStickyScaleVisibility, { passive: true })
+    window.addEventListener("resize", updateStickyScaleVisibility)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId)
+      window.removeEventListener("scroll", updateStickyScaleVisibility)
+      window.removeEventListener("resize", updateStickyScaleVisibility)
+    }
+  }, [currentQuestionnaire, currentCode])
 
   function updateCurrentDraft(updater: (current: SurveyDraft) => SurveyDraft) {
     if (!currentQuestionnaire) return
@@ -373,7 +416,7 @@ export function Survey() {
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
       <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-        <header className="sticky top-4 z-40 mb-8 flex flex-col gap-5 rounded-3xl bg-slate-950/95 p-6 text-white shadow-xl shadow-slate-300/40 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
+        <header className="mb-8 flex flex-col gap-5 rounded-3xl bg-slate-950/95 p-6 text-white shadow-xl shadow-slate-300/40 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
           <div>
             <Link to="/" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-cyan-200 hover:text-cyan-100">
               <ArrowLeft className="size-4" />
@@ -612,9 +655,11 @@ export function Survey() {
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto">
+                    <StickySurveyScale scale={scale} isVisible={showStickyScale} />
+
+                    <div ref={checklistTableRef} className="overflow-x-auto">
                       <table className="w-full min-w-full border-collapse text-left text-sm">
-                        <thead className="bg-slate-100 text-slate-700">
+                        <thead ref={checklistScaleHeaderRef} className="bg-slate-100 text-slate-700">
                           <tr>
                             <th className="w-full px-4 py-3 font-black">Checklist Item</th>
                             {scale.map((option) => (
@@ -734,6 +779,37 @@ function SurveyStepCard({ step, title, isActive, isComplete, onClick }: SurveySt
         </div>
       </div>
     </button>
+  )
+}
+
+type StickySurveyScaleProps = {
+  scale: ReturnType<typeof normalizeScale>
+  isVisible: boolean
+}
+
+function StickySurveyScale({ scale, isVisible }: StickySurveyScaleProps) {
+  if (!isVisible) {
+    return null
+  }
+
+  return (
+    <div className="pointer-events-none fixed left-0 right-0 top-0 z-50 px-6 pt-2 lg:px-8">
+      <div className="mx-auto max-w-7xl rounded-b-2xl border border-slate-200 bg-white px-5 py-3 shadow-lg shadow-slate-300/40">
+        <div className="overflow-x-auto">
+          <div className="flex min-w-max gap-2 sm:min-w-0 sm:flex-wrap sm:justify-end">
+            {scale.map((option) => (
+              <span
+                key={option.value}
+                className="inline-flex min-w-36 items-center justify-center gap-2 rounded-2xl bg-slate-100 px-3 py-2 text-center text-xs font-bold text-slate-700"
+              >
+                <span className="text-base font-black text-slate-950">{option.value}</span>
+                <span className="whitespace-nowrap">{option.label}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
