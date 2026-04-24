@@ -32,6 +32,7 @@ export type SurveyForm = {
   scale: LikertScaleOption[]
   voluntaryNote?: string | null
   signatureLabel?: string | null
+  respondentInformationRequired: boolean
   isActive: boolean
   createdAt?: string | Date
   updatedAt?: string | Date
@@ -156,6 +157,38 @@ export type SurveyFormStatistics = DescriptiveStatistics & {
   sections: SurveySectionStatistics[]
 }
 
+export type CreateSurveyItemPayload = {
+  code?: string
+  statement: string
+  sortOrder?: number
+  isRequired?: boolean
+}
+
+export type CreateSurveySectionPayload = {
+  code?: string
+  title: string
+  sortOrder?: number
+  items: CreateSurveyItemPayload[]
+}
+
+export type CreateSurveyFormPayload = {
+  code: SurveyFormCode
+  title: string
+  description?: string
+  studyTitle?: string | null
+  documentHeader?: Record<string, unknown> | null
+  introduction?: string | null
+  researchers?: string[] | null
+  adviser?: string | null
+  instruction?: string
+  scale?: LikertScaleOption[]
+  voluntaryNote?: string | null
+  signatureLabel?: string | null
+  respondentInformationRequired?: boolean
+  isActive?: boolean
+  sections?: CreateSurveySectionPayload[]
+}
+
 export type StatisticsFilters = {
   formId?: string
   formCode?: SurveyFormCode
@@ -166,13 +199,17 @@ export type StatisticsFilters = {
   submittedTo?: string
 }
 
-const ENV_API_URL = (import.meta as unknown as {
+const ENV = (import.meta as unknown as {
   env?: Record<string, string | undefined>
-}).env?.SurveyStat_URL
+}).env
+
+const ENV_API_URL = ENV?.SurveyStat_URL || ENV?.VITE_SURVEYSTAT_API_URL || ENV?.VITE_API_URL
+const ENV_SYSTEM_URL = ENV?.VITE_ACREDIFY_SYSTEM_URL || ENV?.VITE_SYSTEM_URL
 
 const DEFAULT_API_URL = "http://localhost:8080"
 
 export const SURVEYSTAT_API_URL = normalizeBaseUrl(ENV_API_URL || DEFAULT_API_URL)
+export const ACREDIFY_SYSTEM_URL = normalizeOptionalUrl(ENV_SYSTEM_URL)
 
 export class SurveyStatApiError extends Error {
   status: number
@@ -188,6 +225,16 @@ export class SurveyStatApiError extends Error {
 
 function normalizeBaseUrl(url: string) {
   return url.replace(/\/+$/, "")
+}
+
+function normalizeOptionalUrl(url?: string) {
+  const trimmed = url?.trim()
+
+  if (!trimmed) {
+    return ""
+  }
+
+  return normalizeBaseUrl(trimmed)
 }
 
 function normalizePath(path: string) {
@@ -312,6 +359,9 @@ export const surveystatApi = {
 export const surveyStatService = {
   listSurveyForms: (activeOnly = true) =>
     surveystatApi.get<SurveyForm[]>(`/surveys/forms${buildQueryString({ activeOnly })}`),
+
+  createSurveyForm: (payload: CreateSurveyFormPayload) =>
+    surveystatApi.post<SurveyQuestionnaireForm>("/surveys/forms", payload),
 
   getQuestionnaireByFormCode: (formCode: SurveyFormCode) =>
     surveystatApi.get<SurveyQuestionnaireForm>(
