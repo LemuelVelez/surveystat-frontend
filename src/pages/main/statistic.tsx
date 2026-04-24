@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ComponentType, type CSSProperties, type ReactNode } from "react"
 import { AgGridReact } from "ag-grid-react"
 import { AllCommunityModule, ModuleRegistry, type ColDef } from "ag-grid-community"
-import Plot from "react-plotly.js"
 import {
   ArrowLeft,
   BarChart3,
@@ -36,6 +35,19 @@ type DistributionDatum = {
   rating: string
   count: number
 }
+
+type PlotlyChartProps = {
+  data: Record<string, unknown>[]
+  layout: Record<string, unknown>
+  config?: Record<string, unknown>
+  useResizeHandler?: boolean
+  className?: string
+  style?: CSSProperties
+}
+
+type PlotlyComponent = ComponentType<PlotlyChartProps>
+
+let plotlyComponentPromise: Promise<PlotlyComponent> | null = null
 
 const defaultSummary: StatisticsSummary = {
   responseCount: 0,
@@ -122,6 +134,94 @@ function createFallbackCalculation(summary: StatisticsSummary) {
       result: summary.interpretation,
     },
   ]
+}
+
+function installPlotlyGlobalShim() {
+  if (typeof globalThis === "undefined") return
+
+  const runtimeGlobal = globalThis as typeof globalThis & {
+    global?: typeof globalThis
+  }
+
+  if (!runtimeGlobal.global) {
+    runtimeGlobal.global = globalThis
+  }
+}
+
+function resolvePlotlyComponent(moduleValue: unknown): PlotlyComponent {
+  let candidate = moduleValue
+
+  for (let index = 0; index < 4; index += 1) {
+    if (typeof candidate === "function") {
+      return candidate as PlotlyComponent
+    }
+
+    if (candidate && typeof candidate === "object" && "default" in candidate) {
+      candidate = (candidate as { default: unknown }).default
+      continue
+    }
+
+    break
+  }
+
+  throw new Error("Unable to load Plotly chart component.")
+}
+
+async function loadPlotlyComponent() {
+  installPlotlyGlobalShim()
+
+  if (!plotlyComponentPromise) {
+    plotlyComponentPromise = import("react-plotly.js").then(resolvePlotlyComponent)
+  }
+
+  return plotlyComponentPromise
+}
+
+function PlotlyChart(props: PlotlyChartProps) {
+  const [PlotComponent, setPlotComponent] = useState<PlotlyComponent | null>(null)
+  const [plotlyErrorMessage, setPlotlyErrorMessage] = useState("")
+
+  useEffect(() => {
+    let isMounted = true
+
+    loadPlotlyComponent()
+      .then((component) => {
+        if (isMounted) {
+          setPlotComponent(() => component)
+        }
+      })
+      .catch((error) => {
+        if (isMounted) {
+          setPlotlyErrorMessage(getErrorMessage(error))
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  if (plotlyErrorMessage) {
+    return <EmptyChartState message={plotlyErrorMessage} />
+  }
+
+  if (!PlotComponent) {
+    return (
+      <div className="flex h-96 items-center justify-center rounded-2xl bg-slate-50">
+        <Loader2 className="size-8 animate-spin text-cyan-600" />
+      </div>
+    )
+  }
+
+  return <PlotComponent {...props} />
+}
+
+function EmptyChartState({ message }: { message: string }) {
+  return (
+    <div className="flex h-96 items-center justify-center rounded-2xl bg-slate-50 p-6 text-center">
+      <p className="max-w-sm text-sm font-semibold leading-6 text-slate-500">{message}</p>
+    </div>
+  )
 }
 
 export function Statistic() {
@@ -364,7 +464,7 @@ export function Statistic() {
 
             <section className="grid gap-6 xl:grid-cols-2">
               <ChartCard title="Rating Distribution">
-                <Plot
+                <PlotlyChart
                   data={[
                     {
                       x: distributionData.map((item) => item.rating),
@@ -388,7 +488,7 @@ export function Statistic() {
               </ChartCard>
 
               <ChartCard title="Weighted Mean by Selected Form">
-                <Plot
+                <PlotlyChart
                   data={[
                     {
                       labels: formChartLabels,
@@ -434,8 +534,10 @@ export function Statistic() {
                   rowData={sectionStatistics}
                   columnDefs={sectionColumnDefs}
                   defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                  theme="legacy"
                   pagination
                   paginationPageSize={10}
+                  paginationPageSizeSelector={[10, 20, 50, 100]}
                   animateRows
                 />
               </div>
@@ -447,8 +549,10 @@ export function Statistic() {
                   rowData={itemStatistics}
                   columnDefs={itemColumnDefs}
                   defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                  theme="legacy"
                   pagination
                   paginationPageSize={10}
+                  paginationPageSizeSelector={[10, 20, 50, 100]}
                   animateRows
                 />
               </div>
