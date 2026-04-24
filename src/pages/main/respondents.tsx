@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Copy,
   Eye,
+  FileDown,
   Loader2,
   Mail,
   RefreshCcw,
@@ -87,6 +88,7 @@ export function Respondents() {
   const [isLoading, setIsLoading] = useState(true)
   const [isAnswersLoading, setIsAnswersLoading] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isResponsesPreviewOpen, setIsResponsesPreviewOpen] = useState(false)
   const [pendingDeleteResponse, setPendingDeleteResponse] = useState<SurveyResponseSummary | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isResending, setIsResending] = useState(false)
@@ -141,6 +143,35 @@ export function Respondents() {
       { field: "interpretation", headerName: "Interpretation", minWidth: 180, flex: 1 },
     ],
     [],
+  )
+
+  const responsesPreviewColumns = useMemo<PreviewColumn<SurveyResponseSummary>[]>(
+    () => [
+      { key: "formTitle", header: "Survey" },
+      { key: "formCode", header: "Code" },
+      { key: "respondentFullName", header: "Respondent", getValue: (row) => row.respondentFullName || "Anonymous" },
+      { key: "respondentEmail", header: "Email", getValue: (row) => row.respondentEmail || "—" },
+      { key: "respondentRole", header: "Role", getValue: (row) => row.respondentRole || "—" },
+      { key: "respondentOffice", header: "Office", getValue: (row) => row.respondentOffice || "—" },
+      { key: "respondentProgram", header: "Program", getValue: (row) => row.respondentProgram || "—" },
+      { key: "answerCount", header: "Answers" },
+      { key: "weightedMean", header: "Weighted Mean", getValue: (row) => formatNumber(row.weightedMean) },
+      { key: "interpretation", header: "Interpretation", getValue: (row) => row.interpretation || "No data" },
+      { key: "meanRange", header: "Mean Range", getValue: (row) => row.meanRange || "—" },
+      { key: "submittedAt", header: "Submitted", getValue: (row) => formatDate(row.submittedAt) },
+    ],
+    [],
+  )
+
+  const responsesPreviewSummary = useMemo<PreviewSummaryItem[]>(
+    () => [
+      { label: "Filter", value: selectedForm?.title ?? "All survey responses" },
+      { label: "Responses", value: responseCount },
+      { label: "Respondents", value: respondentCount },
+      { label: "Answers", value: answerCount },
+      { label: "Average Weighted Mean", value: formatNumber(averageWeightedMean) },
+    ],
+    [answerCount, averageWeightedMean, respondentCount, responseCount, selectedForm],
   )
 
   const responsePreviewColumns = useMemo<PreviewColumn<SurveyResponseAnswer>[]>(
@@ -393,7 +424,21 @@ export function Respondents() {
           </div>
         ) : (
           <div className="space-y-6">
-            <GridCard title="Survey Responses" rows={responses.length}>
+            <GridCard
+              title="Survey Responses"
+              rows={responses.length}
+              actions={
+                <button
+                  type="button"
+                  onClick={() => setIsResponsesPreviewOpen(true)}
+                  disabled={responses.length === 0}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  <FileDown className="size-4" />
+                  Preview Export
+                </button>
+              }
+            >
               <div className="ag-theme-quartz h-96 w-full">
                 <AgGridReact
                   rowData={responses}
@@ -423,7 +468,7 @@ export function Respondents() {
                         className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500"
                       >
                         <Eye className="size-4" />
-                        Preview
+                        Preview Export
                       </button>
                       <button
                         type="button"
@@ -493,6 +538,18 @@ export function Respondents() {
           </div>
         )}
       </div>
+
+      <Preview
+        isOpen={isResponsesPreviewOpen}
+        title={selectedForm ? `Responses Preview Export · ${selectedForm.title}` : "Responses Preview Export"}
+        subtitle={selectedFormCode ? `Filtered by ${selectedFormCode}` : "All submitted survey responses"}
+        fileName={selectedFormCode ? `${selectedFormCode}-survey-responses` : "all-survey-responses"}
+        summary={responsesPreviewSummary}
+        rows={responses}
+        columns={responsesPreviewColumns}
+        isLoading={isLoading}
+        onClose={() => setIsResponsesPreviewOpen(false)}
+      />
 
       <Preview
         isOpen={isPreviewOpen}
@@ -602,10 +659,11 @@ function SummaryCard({ label, value }: SummaryCardProps) {
 type GridCardProps = {
   title: string
   rows: number
+  actions?: ReactNode
   children: ReactNode
 }
 
-function GridCard({ title, rows, children }: GridCardProps) {
+function GridCard({ title, rows, actions, children }: GridCardProps) {
   return (
     <section className="rounded-3xl bg-white p-6 shadow-sm">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -615,7 +673,10 @@ function GridCard({ title, rows, children }: GridCardProps) {
           </span>
           <h2 className="text-xl font-black">{title}</h2>
         </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600">{rows} rows</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {actions}
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600">{rows} rows</span>
+        </div>
       </div>
       {children}
     </section>

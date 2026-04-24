@@ -12,8 +12,8 @@ import {
   PenLine,
   ScanLine,
   Send,
-  Type,
   Upload,
+  Camera,
   UserRound,
 } from "lucide-react"
 import { Link, useSearchParams } from "react-router-dom"
@@ -39,13 +39,12 @@ const defaultScale = [
 
 const respondentRoles = ["Student", "Faculty", "QA Personnel", "Administrator", "Other"]
 
-type SignatureMode = "type" | "draw" | "scan"
+type SignatureMode = "draw" | "scan"
 
 type SurveyDraft = {
   answers: Record<string, LikertValue>
   respondent: CreateRespondentPayload
   includeRespondentInformation: boolean
-  respondentSignature: string
   respondentSignatureImage: string
   respondentSignatureFileName: string
   signatureMode: SignatureMode
@@ -97,10 +96,9 @@ function getInitialDraft(includeRespondentInformation = true): SurveyDraft {
     answers: {},
     respondent: getInitialRespondent(),
     includeRespondentInformation,
-    respondentSignature: "",
     respondentSignatureImage: "",
     respondentSignatureFileName: "",
-    signatureMode: "type",
+    signatureMode: "draw",
     voluntaryConsent: false,
     isSubmitted: false,
   }
@@ -332,13 +330,6 @@ export function Survey() {
     }))
   }
 
-  function setRespondentSignature(value: string) {
-    updateCurrentDraft((current) => ({
-      ...current,
-      respondentSignature: value,
-      isSubmitted: false,
-    }))
-  }
 
   function setRespondentSignatureImage(value: string, filename = "respondent-signature.png") {
     updateCurrentDraft((current) => ({
@@ -421,7 +412,7 @@ export function Survey() {
         formId: currentQuestionnaire.id,
         formCode: currentQuestionnaire.code,
         respondent: getRespondentPayload(),
-        respondentSignature: currentDraft.respondentSignature,
+        respondentSignature: null,
         respondentSignatureImage: currentDraft.respondentSignatureImage || null,
         respondentSignatureFileName: currentDraft.respondentSignatureFileName || null,
         voluntaryConsent: currentDraft.voluntaryConsent,
@@ -723,11 +714,9 @@ export function Survey() {
                     <SignatureCapture
                       label={currentQuestionnaire.signatureLabel || "Respondent Signature"}
                       mode={currentDraft.signatureMode}
-                      typedSignature={currentDraft.respondentSignature}
                       imageSignature={currentDraft.respondentSignatureImage}
                       imageFilename={currentDraft.respondentSignatureFileName}
                       onModeChange={setSignatureMode}
-                      onTypedSignatureChange={setRespondentSignature}
                       onImageSignatureChange={setRespondentSignatureImage}
                     />
 
@@ -783,26 +772,23 @@ export function Survey() {
 type SignatureCaptureProps = {
   label: string
   mode: SignatureMode
-  typedSignature: string
   imageSignature: string
   imageFilename: string
   onModeChange: (mode: SignatureMode) => void
-  onTypedSignatureChange: (value: string) => void
   onImageSignatureChange: (value: string, filename?: string) => void
 }
 
 function SignatureCapture({
   label,
   mode,
-  typedSignature,
   imageSignature,
   imageFilename,
   onModeChange,
-  onTypedSignatureChange,
   onImageSignatureChange,
 }: SignatureCaptureProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
   const isDrawingRef = useRef(false)
 
   useEffect(() => {
@@ -925,17 +911,11 @@ function SignatureCapture({
         <div>
           <span className="text-sm font-black text-slate-700">{label}</span>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            Optional: type your name, draw your signature, or scan/upload a signature image.
+            Optional: draw your signature or scan/capture a signature image using your camera.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <SignatureModeButton
-            label="Type"
-            icon={<Type className="size-4" />}
-            isActive={mode === "type"}
-            onClick={() => onModeChange("type")}
-          />
           <SignatureModeButton
             label="Draw"
             icon={<PenLine className="size-4" />}
@@ -950,18 +930,6 @@ function SignatureCapture({
           />
         </div>
       </div>
-
-      {mode === "type" ? (
-        <label className="block">
-          <span className="text-xs font-black uppercase tracking-wide text-slate-500">Typed Signature</span>
-          <input
-            value={typedSignature}
-            onChange={(event) => onTypedSignatureChange(event.target.value)}
-            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-            placeholder="Type your name as signature"
-          />
-        </label>
-      ) : null}
 
       {mode === "draw" ? (
         <div className="space-y-3">
@@ -993,26 +961,37 @@ function SignatureCapture({
       {mode === "scan" ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
                 <ImagePlus className="size-5" />
               </span>
               <div>
-                <p className="font-black text-slate-950">Upload scanned signature</p>
+                <p className="font-black text-slate-950">Scan or capture signature</p>
                 <p className="mt-1 text-sm leading-6 text-slate-500">
-                  Select a captured signature image from your device.
+                  Use your camera to capture a paper signature or choose an existing image from your device.
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800"
-            >
-              <Upload className="size-4" />
-              Choose Image
-            </button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-600 px-4 py-3 text-sm font-black text-white transition hover:bg-cyan-700"
+              >
+                <Camera className="size-4" />
+                Capture with Camera
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800"
+              >
+                <Upload className="size-4" />
+                Choose Image
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
