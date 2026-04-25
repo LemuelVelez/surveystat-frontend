@@ -475,7 +475,7 @@ function withAnonymousRespondent(payload: SubmitSurveyResponsePayload): SubmitSu
     ...payload,
     respondent: {
       fullName: "Anonymous Respondent",
-      role: "Anonymous",
+      role: "Other",
       consentGiven: payload.voluntaryConsent,
     },
   }
