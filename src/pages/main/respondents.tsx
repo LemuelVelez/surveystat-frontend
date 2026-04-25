@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { AgGridReact } from "ag-grid-react"
-import { AllCommunityModule, ModuleRegistry, type ColDef, type RowClickedEvent, type SelectionChangedEvent } from "ag-grid-community"
+import { AllCommunityModule, ModuleRegistry, type ColDef, type RowClickedEvent } from "ag-grid-community"
 import {
   ArrowLeft,
   ClipboardList,
@@ -332,6 +332,44 @@ function renderSignatureValue(response: SurveyResponseSummary) {
   )
 }
 
+type SelectionCheckboxProps = {
+  checked: boolean
+  indeterminate?: boolean
+  disabled?: boolean
+  label: string
+  onChange: (checked: boolean) => void
+}
+
+function SelectionCheckbox({ checked, indeterminate = false, disabled = false, label, onChange }: SelectionCheckboxProps) {
+  const checkboxRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (checkboxRef.current) {
+      checkboxRef.current.indeterminate = indeterminate
+    }
+  }, [indeterminate])
+
+  return (
+    <label
+      className="flex h-full w-full cursor-pointer items-center justify-center"
+      title={label}
+      onClick={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <span className="sr-only">{label}</span>
+      <input
+        ref={checkboxRef}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        aria-label={label}
+        onChange={(event) => onChange(event.target.checked)}
+        className="size-4 cursor-pointer rounded border border-slate-300 bg-white accent-cyan-600 disabled:cursor-not-allowed disabled:opacity-50"
+      />
+    </label>
+  )
+}
+
 export function Respondents() {
   const [forms, setForms] = useState<SurveyForm[]>([])
   const [selectedFormCode, setSelectedFormCode] = useState("")
@@ -356,11 +394,13 @@ export function Respondents() {
     () => responses.find((response) => response.id === selectedResponseId) ?? null,
     [responses, selectedResponseId],
   )
-  const selectedResponses = useMemo(() => {
-    const selectedIds = new Set(selectedResponseIds)
-
-    return responses.filter((response) => selectedIds.has(response.id))
-  }, [responses, selectedResponseIds])
+  const selectedResponseIdsSet = useMemo(() => new Set(selectedResponseIds), [selectedResponseIds])
+  const selectedResponses = useMemo(
+    () => responses.filter((response) => selectedResponseIdsSet.has(response.id)),
+    [responses, selectedResponseIdsSet],
+  )
+  const isAllResponsesSelected = responses.length > 0 && responses.every((response) => selectedResponseIdsSet.has(response.id))
+  const isSomeResponsesSelected = responses.some((response) => selectedResponseIdsSet.has(response.id))
   const selectedShareUrl = useMemo(
     () => getSurveyShareUrl(selectedFormCode ? [selectedFormCode] : forms.map((form) => form.code)),
     [forms, selectedFormCode],
@@ -392,9 +432,27 @@ export function Respondents() {
   const selectedSignatureSources = selectedResponse ? getResponseSignatureImageSources(selectedResponse) : []
   const selectedSignatureFallback = selectedResponse ? getResponseSignatureFallbackValue(selectedResponse) : ""
 
+  const toggleResponseSelection = useCallback((responseId: string, isSelected: boolean) => {
+    setSelectedResponseIds((current) => {
+      if (isSelected) {
+        return current.includes(responseId) ? current : [...current, responseId]
+      }
+
+      return current.filter((selectedResponseId) => selectedResponseId !== responseId)
+    })
+  }, [])
+
+  const toggleAllResponsesSelection = useCallback(
+    (isSelected: boolean) => {
+      setSelectedResponseIds(isSelected ? responses.map((response) => response.id) : [])
+    },
+    [responses],
+  )
+
   const responseColumnDefs = useMemo<ColDef<SurveyResponseSummary>[]>(
     () => [
       {
+        colId: "responseSelection",
         headerName: "",
         width: 56,
         minWidth: 56,
@@ -403,8 +461,36 @@ export function Respondents() {
         sortable: false,
         filter: false,
         resizable: false,
-        checkboxSelection: true,
-        headerCheckboxSelection: true,
+        suppressNavigable: true,
+        cellClass: "!flex !items-center !justify-center bg-white",
+        headerClass: "!flex !items-center !justify-center bg-white",
+        headerComponent: () => (
+          <SelectionCheckbox
+            checked={isAllResponsesSelected}
+            indeterminate={isSomeResponsesSelected && !isAllResponsesSelected}
+            disabled={responses.length === 0}
+            label="Select all responses"
+            onChange={toggleAllResponsesSelection}
+          />
+        ),
+        cellRenderer: (params: { data?: SurveyResponseSummary; node?: { rowIndex?: number | null } }) => {
+          const response = params.data
+          const responseId = response?.id ?? ""
+          const respondentName = response ? getRespondentDisplayName(response, params.node?.rowIndex ?? 0) : "response"
+
+          return (
+            <SelectionCheckbox
+              checked={Boolean(responseId && selectedResponseIdsSet.has(responseId))}
+              disabled={!responseId}
+              label={`Select ${respondentName}`}
+              onChange={(isSelected) => {
+                if (responseId) {
+                  toggleResponseSelection(responseId, isSelected)
+                }
+              }}
+            />
+          )
+        },
       },
       { field: "formTitle", headerName: "Survey", minWidth: 260, flex: 1 },
       {
@@ -434,7 +520,7 @@ export function Respondents() {
         valueFormatter: (params) => formatDate(params.value),
       },
     ],
-    [],
+    [isAllResponsesSelected, isSomeResponsesSelected, responses.length, selectedResponseIdsSet, toggleAllResponsesSelection, toggleResponseSelection],
   )
 
   const answerColumnDefs = useMemo<ColDef<SurveyResponseAnswer>[]>(
@@ -642,9 +728,6 @@ export function Respondents() {
     }
   }
 
-  function handleResponsesSelectionChanged(event: SelectionChangedEvent<SurveyResponseSummary>) {
-    setSelectedResponseIds(event.api.getSelectedRows().map((response) => response.id))
-  }
 
   useEffect(() => {
     loadRespondentsPage("")
@@ -772,10 +855,7 @@ export function Respondents() {
                   pagination
                   paginationPageSize={10}
                   animateRows
-                  rowSelection="multiple"
-                  suppressRowClickSelection
                   getRowId={(params) => params.data?.id ?? ""}
-                  onSelectionChanged={handleResponsesSelectionChanged}
                   onRowClicked={handleRowClicked}
                 />
               </div>
