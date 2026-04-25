@@ -381,7 +381,7 @@ export function Respondents() {
   const [isAnswersLoading, setIsAnswersLoading] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isResponsesPreviewOpen, setIsResponsesPreviewOpen] = useState(false)
-  const [pendingDeleteResponse, setPendingDeleteResponse] = useState<SurveyResponseSummary | null>(null)
+  const [pendingDeleteResponses, setPendingDeleteResponses] = useState<SurveyResponseSummary[]>([])
   const [isDeleting, setIsDeleting] = useState(false)
   const [isResending, setIsResending] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
@@ -431,6 +431,8 @@ export function Respondents() {
   const selectedRespondentName = selectedResponse ? getRespondentDisplayName(selectedResponse, selectedResponseIndex) : ""
   const selectedSignatureSources = selectedResponse ? getResponseSignatureImageSources(selectedResponse) : []
   const selectedSignatureFallback = selectedResponse ? getResponseSignatureFallbackValue(selectedResponse) : ""
+  const pendingDeleteCount = pendingDeleteResponses.length
+  const deleteButtonLabel = selectedResponses.length > 0 ? `Delete Selected (${selectedResponses.length})` : "Delete All"
 
   const toggleResponseSelection = useCallback((responseId: string, isSelected: boolean) => {
     setSelectedResponseIds((current) => {
@@ -697,18 +699,43 @@ export function Respondents() {
     }
   }
 
-  async function confirmDeleteResponse() {
-    if (!pendingDeleteResponse) return
+  function openDeleteResponsesDialog() {
+    const responsesToDelete = selectedResponses.length > 0 ? selectedResponses : responses
+
+    if (responsesToDelete.length === 0) {
+      toast.error("No survey responses to delete.")
+      return
+    }
+
+    setPendingDeleteResponses(responsesToDelete)
+  }
+
+  async function confirmDeleteResponses() {
+    if (pendingDeleteResponses.length === 0) return
+
+    const responsesToDelete = pendingDeleteResponses
+    const deletedResponseIds = new Set(responsesToDelete.map((response) => response.id))
 
     setIsDeleting(true)
 
     try {
-      await surveyStatService.deleteSurveyResponse(pendingDeleteResponse.id)
-      toast.success("Survey response deleted successfully.")
-      setPendingDeleteResponse(null)
-      setSelectedResponseId("")
-      setSelectedResponseIds((current) => current.filter((responseId) => responseId !== pendingDeleteResponse.id))
-      setAnswers([])
+      for (const response of responsesToDelete) {
+        await surveyStatService.deleteSurveyResponse(response.id)
+      }
+
+      toast.success(
+        responsesToDelete.length === 1
+          ? "Survey response deleted successfully."
+          : `${responsesToDelete.length} survey responses deleted successfully.`,
+      )
+      setPendingDeleteResponses([])
+      setSelectedResponseId((current) => (deletedResponseIds.has(current) ? "" : current))
+      setSelectedResponseIds((current) => current.filter((responseId) => !deletedResponseIds.has(responseId)))
+
+      if (selectedResponseId && deletedResponseIds.has(selectedResponseId)) {
+        setAnswers([])
+      }
+
       await loadRespondentsPage(selectedFormCode)
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -836,15 +863,26 @@ export function Respondents() {
               title="Survey Responses"
               rows={responses.length}
               actions={
-                <button
-                  type="button"
-                  onClick={() => setIsResponsesPreviewOpen(true)}
-                  disabled={responses.length === 0}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-slate-300"
-                >
-                  <FileDown className="size-4" />
-                  {selectedResponses.length > 0 ? `Preview Selected (${selectedResponses.length})` : "Preview Export"}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setIsResponsesPreviewOpen(true)}
+                    disabled={responses.length === 0}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    <FileDown className="size-4" />
+                    {selectedResponses.length > 0 ? `Preview Selected (${selectedResponses.length})` : "Preview Export"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openDeleteResponsesDialog}
+                    disabled={responses.length === 0 || isDeleting}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isDeleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                    {deleteButtonLabel}
+                  </button>
+                </>
               }
             >
               <div className="ag-theme-quartz h-96 w-full">
@@ -886,14 +924,6 @@ export function Respondents() {
                       >
                         {isResending ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
                         Resend Review
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPendingDeleteResponse(selectedResponse)}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700 transition hover:bg-red-100"
-                      >
-                        <Trash2 className="size-4" />
-                        Delete
                       </button>
                     </div>
                   </div>
@@ -991,7 +1021,7 @@ export function Respondents() {
         onClose={() => setIsPreviewOpen(false)}
       />
 
-      {pendingDeleteResponse ? (
+      {pendingDeleteCount > 0 ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl shadow-slate-950/30">
             <div className="flex items-start gap-4">
@@ -999,21 +1029,34 @@ export function Respondents() {
                 <Trash2 className="size-6" />
               </span>
               <div>
-                <h2 className="text-2xl font-black tracking-tight text-slate-950">Delete survey response?</h2>
+                <h2 className="text-2xl font-black tracking-tight text-slate-950">
+                  {pendingDeleteCount === responses.length ? "Delete all survey responses?" : `Delete ${pendingDeleteCount} survey response${pendingDeleteCount === 1 ? "" : "s"}?`}
+                </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  This will remove the selected response and its answers from SurveyStat.
+                  This will remove {pendingDeleteCount === responses.length ? "all visible responses" : "the selected responses"} and their answers from SurveyStat.
                 </p>
                 <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm">
-                  <p className="font-black text-slate-950">
-                    {getRespondentDisplayName(
-                      pendingDeleteResponse,
-                      Math.max(
-                        0,
-                        responses.findIndex((response) => response.id === pendingDeleteResponse.id),
-                      ),
-                    )}
-                  </p>
-                  <p className="mt-1 text-slate-500">{pendingDeleteResponse.formTitle}</p>
+                  {pendingDeleteCount === 1 ? (
+                    <>
+                      <p className="font-black text-slate-950">
+                        {getRespondentDisplayName(
+                          pendingDeleteResponses[0],
+                          Math.max(
+                            0,
+                            responses.findIndex((response) => response.id === pendingDeleteResponses[0].id),
+                          ),
+                        )}
+                      </p>
+                      <p className="mt-1 text-slate-500">{pendingDeleteResponses[0].formTitle}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-black text-slate-950">{pendingDeleteCount} responses will be deleted.</p>
+                      <p className="mt-1 text-slate-500">
+                        {pendingDeleteCount === responses.length ? "Delete all visible rows." : "Delete selected rows only."}
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -1021,7 +1064,7 @@ export function Respondents() {
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                onClick={() => setPendingDeleteResponse(null)}
+                onClick={() => setPendingDeleteResponses([])}
                 disabled={isDeleting}
                 className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -1029,12 +1072,12 @@ export function Respondents() {
               </button>
               <button
                 type="button"
-                onClick={confirmDeleteResponse}
+                onClick={confirmDeleteResponses}
                 disabled={isDeleting}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-black text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-red-300"
               >
                 {isDeleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-                Delete Response
+                Delete
               </button>
             </div>
           </div>
