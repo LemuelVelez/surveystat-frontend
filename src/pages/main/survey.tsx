@@ -15,6 +15,7 @@ import {
   Upload,
   Camera,
   UserRound,
+  X,
 } from "lucide-react"
 import { Link, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
@@ -141,6 +142,7 @@ export function Survey() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const [showStickyScale, setShowStickyScale] = useState(false)
+  const [isChecklistDialogOpen, setIsChecklistDialogOpen] = useState(false)
   const checklistTableRef = useRef<HTMLDivElement>(null)
   const checklistScaleHeaderRef = useRef<HTMLTableSectionElement>(null)
 
@@ -287,6 +289,10 @@ export function Survey() {
       window.removeEventListener("resize", updateStickyScaleVisibility)
     }
   }, [currentQuestionnaire, currentCode])
+
+  useEffect(() => {
+    setIsChecklistDialogOpen(false)
+  }, [currentCode])
 
   function updateCurrentDraft(updater: (current: SurveyDraft) => SurveyDraft) {
     if (!currentQuestionnaire) return
@@ -439,20 +445,20 @@ export function Survey() {
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
-      <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-        <header className="mb-8 flex flex-col gap-5 rounded-3xl bg-slate-950/95 p-6 text-white shadow-xl shadow-slate-300/40 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <Link to="/" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-cyan-200 hover:text-cyan-100">
+      <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-8 lg:px-8">
+        <header className="mb-6 flex flex-col gap-5 rounded-2xl bg-slate-950/95 p-4 text-white shadow-xl shadow-slate-300/40 backdrop-blur sm:mb-8 sm:rounded-3xl sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <Link to="/" className="mb-5 inline-flex max-w-xs items-center gap-2 truncate text-sm font-semibold text-cyan-200 hover:text-cyan-100 sm:max-w-none">
               <ArrowLeft className="size-4" />
               Back to Home
             </Link>
-            <div className="flex items-start gap-4">
-              <span className="flex size-14 items-center justify-center rounded-2xl bg-white p-2">
+            <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white p-2 sm:size-14">
                 <img src={logoUrl} alt="SurveyStat logo" className="size-full object-contain" />
               </span>
-              <div>
-                <h1 className="text-3xl font-black tracking-tight md:text-4xl">Survey Checklist</h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+              <div className="min-w-0">
+                <h1 className="max-w-xs truncate text-2xl font-black tracking-tight sm:max-w-none sm:text-3xl md:text-4xl">Survey Checklist</h1>
+                <p className="mt-2 max-w-xs text-sm leading-6 text-slate-300 wrap-anywhere sm:max-w-3xl">
                   Complete Survey 1, Survey 2, and the next surveys in order. Each survey is submitted before moving forward.
                 </p>
               </div>
@@ -460,20 +466,20 @@ export function Survey() {
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-100">
+            <div className="max-w-xs truncate rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-100 sm:max-w-none">
               {completedCount}/{questionnaires.length || 0} surveys submitted
             </div>
             <button
               type="button"
               onClick={copyCurrentSurveyShareLink}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10 sm:w-auto"
             >
               <Copy className="size-4" />
               Share Survey
             </button>
             <Link
               to="/statistic"
-              className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-slate-100"
+              className="inline-flex w-full items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-slate-100 sm:w-auto"
             >
               View Statistics
             </Link>
@@ -512,7 +518,7 @@ export function Survey() {
           </div>
         ) : (
           <form onSubmit={handleSubmitCurrentSurvey} className="space-y-6">
-            <section className="rounded-3xl bg-white p-6 shadow-sm">
+            <section className="rounded-2xl bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
               {isQuestionnaireLoading ? (
                 <div className="flex min-h-96 items-center justify-center">
                   <Loader2 className="size-8 animate-spin text-cyan-600" />
@@ -520,14 +526,14 @@ export function Survey() {
               ) : currentQuestionnaire ? (
                 <div className="space-y-8">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <p className="text-sm font-bold uppercase tracking-wide text-cyan-700">
+                    <div className="min-w-0">
+                      <p className="max-w-xs truncate text-sm font-bold uppercase tracking-wide text-cyan-700 sm:max-w-none">
                         Survey {currentSurveyIndex + 1} of {questionnaires.length} · {currentQuestionnaire.code}
                       </p>
-                      <h2 className="mt-2 text-3xl font-black tracking-tight">{currentQuestionnaire.title}</h2>
-                      <p className="mt-3 text-sm leading-7 text-slate-600">{currentQuestionnaire.description}</p>
+                      <h2 className="mt-2 max-w-xs text-2xl font-black tracking-tight wrap-anywhere sm:max-w-none sm:text-3xl">{currentQuestionnaire.title}</h2>
+                      <p className="mt-3 max-w-xs text-sm leading-7 text-slate-600 wrap-anywhere sm:max-w-3xl">{currentQuestionnaire.description}</p>
                       {currentQuestionnaire.instruction ? (
-                        <div className="mt-4 rounded-2xl border border-cyan-100 bg-cyan-50 p-4 text-sm leading-7 text-cyan-900">
+                        <div className="mt-4 max-w-xs rounded-2xl border border-cyan-100 bg-cyan-50 p-4 text-sm leading-7 text-cyan-900 wrap-anywhere sm:max-w-none">
                           {currentQuestionnaire.instruction}
                         </div>
                       ) : null}
@@ -555,15 +561,15 @@ export function Survey() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
                         <span className="flex size-10 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700">
                           <UserRound className="size-5" />
                         </span>
-                        <div>
-                          <h3 className="font-black text-slate-950">Respondent Details</h3>
-                          <p className="text-sm text-slate-500">
+                        <div className="min-w-0">
+                          <h3 className="max-w-xs truncate font-black text-slate-950 sm:max-w-none">Respondent Details</h3>
+                          <p className="max-w-xs truncate text-sm text-slate-500 sm:max-w-none">
                             {respondentInformationRequired ? "Required by this survey" : "Optional for this survey"}
                           </p>
                         </div>
@@ -575,7 +581,7 @@ export function Survey() {
                           role="switch"
                           aria-checked={currentDraft.includeRespondentInformation}
                           onClick={() => setIncludeRespondentInformation(!currentDraft.includeRespondentInformation)}
-                          className={`inline-flex items-center gap-3 rounded-full px-3 py-2 text-sm font-bold transition ${
+                          className={`inline-flex w-full max-w-xs items-center justify-center gap-3 rounded-full px-3 py-2 text-sm font-bold transition sm:w-auto sm:max-w-none ${
                             currentDraft.includeRespondentInformation ? "bg-cyan-600 text-white" : "bg-slate-200 text-slate-700"
                           }`}
                         >
@@ -629,7 +635,7 @@ export function Survey() {
                                   key={role}
                                   type="button"
                                   onClick={() => updateRespondent("role", role)}
-                                  className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+                                  className={`max-w-xs truncate rounded-full px-4 py-2 text-sm font-bold transition sm:max-w-none ${
                                     isSelected
                                       ? "bg-slate-950 text-white"
                                       : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
@@ -666,14 +672,14 @@ export function Survey() {
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-white">
-                    <div className="flex flex-col gap-2 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <h3 className="text-xl font-black text-slate-950">Checklist Evaluation</h3>
+                    <div className="flex flex-col gap-2 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                      <div className="min-w-0">
+                        <h3 className="max-w-xs truncate text-xl font-black text-slate-950 sm:max-w-none">Checklist Evaluation</h3>
                         <p className="mt-1 text-sm text-slate-500">
                           {answeredCount}/{allItems.length || 0} answered
                         </p>
                       </div>
-                      <div className="inline-flex items-center gap-2 rounded-full bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-700">
+                      <div className="inline-flex max-w-xs items-center gap-2 truncate rounded-full bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-700 sm:max-w-none">
                         <ClipboardList className="size-4" />
                         Survey {currentSurveyIndex + 1}
                       </div>
@@ -681,7 +687,29 @@ export function Survey() {
 
                     <StickySurveyScale scale={scale} isVisible={showStickyScale} />
 
-                    <div ref={checklistTableRef} className="overflow-x-auto">
+                    <div className="border-t border-slate-100 p-4 sm:hidden">
+                      <button
+                        type="button"
+                        onClick={() => setIsChecklistDialogOpen(true)}
+                        className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800"
+                      >
+                        <ClipboardList className="size-4" />
+                        Answer Checklist Items
+                      </button>
+                      <div className="mt-3 grid max-w-xs gap-2">
+                        {scale.map((option) => (
+                          <span
+                            key={option.value}
+                            className="inline-flex min-w-0 items-center justify-between gap-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700"
+                          >
+                            <span className="text-base font-black text-slate-950">{option.value}</span>
+                            <span className="truncate">{option.label}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div ref={checklistTableRef} className="hidden overflow-x-auto sm:block">
                       <table className="w-full min-w-full border-collapse text-left text-sm">
                         <thead ref={checklistScaleHeaderRef} className="bg-slate-100 text-slate-700">
                           <tr>
@@ -710,7 +738,17 @@ export function Survey() {
                     </div>
                   </div>
 
-                  <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  {isChecklistDialogOpen ? (
+                    <MobileChecklistDialog
+                      sections={currentQuestionnaire.sections}
+                      scale={scale}
+                      answers={currentDraft.answers}
+                      updateAnswer={updateAnswer}
+                      onClose={() => setIsChecklistDialogOpen(false)}
+                    />
+                  ) : null}
+
+                  <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                     <SignatureCapture
                       label={currentQuestionnaire.signatureLabel || "Respondent Signature"}
                       mode={currentDraft.signatureMode}
@@ -738,7 +776,7 @@ export function Survey() {
                       >
                         {currentDraft.voluntaryConsent ? <CheckCircle2 className="size-4" /> : null}
                       </span>
-                      <span>
+                      <span className="max-w-xs wrap-anywhere sm:max-w-none">
                         {currentQuestionnaire.voluntaryNote ||
                           "I voluntarily consent to submit this survey response for statistical evaluation."}
                       </span>
@@ -748,7 +786,7 @@ export function Survey() {
                   <button
                     type="submit"
                     disabled={!isCurrentSurveyComplete || isSubmitting}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-6 py-4 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-4 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 sm:px-6"
                   >
                     {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
                     {currentSurveyIndex < questionnaires.length - 1 ? "Submit Survey and Continue" : "Submit Final Survey"}
@@ -908,9 +946,9 @@ function SignatureCapture({
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <span className="text-sm font-black text-slate-700">{label}</span>
-          <p className="mt-1 text-sm leading-6 text-slate-500">
+        <div className="min-w-0">
+          <span className="block max-w-xs truncate text-sm font-black text-slate-700 sm:max-w-none">{label}</span>
+          <p className="mt-1 max-w-xs text-sm leading-6 text-slate-500 wrap-anywhere sm:max-w-none">
             Optional: draw your signature or scan/capture a signature image using your camera.
           </p>
         </div>
@@ -933,10 +971,10 @@ function SignatureCapture({
 
       {mode === "draw" ? (
         <div className="space-y-3">
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-3">
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-2 sm:p-3">
             <canvas
               ref={canvasRef}
-              className="h-48 w-full touch-none rounded-xl bg-white shadow-inner"
+              className="h-40 w-full touch-none rounded-xl bg-white shadow-inner sm:h-48"
               onPointerDown={handleDrawStart}
               onPointerMove={handleDrawMove}
               onPointerUp={handleDrawEnd}
@@ -945,7 +983,7 @@ function SignatureCapture({
             />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-semibold text-slate-500">Draw inside the white box. The image will be uploaded to Amazon S3 on submit.</p>
+            <p className="max-w-xs text-xs font-semibold text-slate-500 wrap-anywhere sm:max-w-none">Draw inside the white box. The image will be uploaded to Amazon S3 on submit.</p>
             <button
               type="button"
               onClick={clearDrawnSignature}
@@ -959,7 +997,7 @@ function SignatureCapture({
       ) : null}
 
       {mode === "scan" ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-3 sm:p-4">
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -969,7 +1007,7 @@ function SignatureCapture({
               </span>
               <div>
                 <p className="font-black text-slate-950">Scan or capture signature</p>
-                <p className="mt-1 text-sm leading-6 text-slate-500">
+                <p className="mt-1 max-w-xs text-sm leading-6 text-slate-500 wrap-anywhere sm:max-w-none">
                   Use your camera to capture a paper signature or choose an existing image from your device.
                 </p>
               </div>
@@ -978,7 +1016,7 @@ function SignatureCapture({
               <button
                 type="button"
                 onClick={() => cameraInputRef.current?.click()}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-600 px-4 py-3 text-sm font-black text-white transition hover:bg-cyan-700"
+                className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-2xl bg-cyan-600 px-4 py-3 text-sm font-black text-white transition hover:bg-cyan-700 sm:w-auto sm:max-w-none"
               >
                 <Camera className="size-4" />
                 Capture with Camera
@@ -986,7 +1024,7 @@ function SignatureCapture({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800"
+                className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800 sm:w-auto sm:max-w-none"
               >
                 <Upload className="size-4" />
                 Choose Image
@@ -998,10 +1036,10 @@ function SignatureCapture({
 
       {imageSignature ? (
         <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
-          <p className="text-xs font-black uppercase tracking-wide text-cyan-700">
+          <p className="max-w-xs truncate text-xs font-black uppercase tracking-wide text-cyan-700 sm:max-w-none">
             Signature image ready {imageFilename ? `· ${imageFilename}` : ""}
           </p>
-          <img src={imageSignature} alt="Respondent signature preview" className="mt-3 max-h-40 rounded-xl border border-cyan-200 bg-white p-3" />
+          <img src={imageSignature} alt="Respondent signature preview" className="mt-3 max-h-40 max-w-xs rounded-xl border border-cyan-200 bg-white p-3 sm:max-w-none" />
         </div>
       ) : null}
     </div>
@@ -1043,11 +1081,11 @@ function SurveyStepCard({ step, title, isActive, isComplete, onClick }: SurveySt
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-2xl border p-4 text-left transition ${
+      className={`w-full max-w-xs rounded-2xl border p-4 text-left transition sm:max-w-none ${
         isActive ? "border-cyan-400 bg-cyan-50 shadow-sm" : "border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50/50"
       }`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         <span
           className={`flex size-9 items-center justify-center rounded-xl text-sm font-black ${
             isComplete ? "bg-cyan-600 text-white" : isActive ? "bg-cyan-100 text-cyan-700" : "bg-slate-100 text-slate-500"
@@ -1055,9 +1093,9 @@ function SurveyStepCard({ step, title, isActive, isComplete, onClick }: SurveySt
         >
           {isComplete ? <CheckCircle2 className="size-5" /> : step}
         </span>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Survey {step}</p>
-          <p className="line-clamp-2 font-black text-slate-950">{title}</p>
+          <p className="line-clamp-2 font-black text-slate-950 wrap-anywhere">{title}</p>
         </div>
       </div>
     </button>
@@ -1075,7 +1113,7 @@ function StickySurveyScale({ scale, isVisible }: StickySurveyScaleProps) {
   }
 
   return (
-    <div className="pointer-events-none fixed left-0 right-0 top-0 z-50 px-6 pt-2 lg:px-8">
+    <div className="pointer-events-none fixed left-0 right-0 top-0 z-50 px-3 pt-2 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl rounded-b-2xl border border-slate-200 bg-white px-5 py-3 shadow-lg shadow-slate-300/40">
         <div className="overflow-x-auto">
           <div className="flex min-w-max gap-2 sm:min-w-0 sm:flex-wrap sm:justify-end">
@@ -1095,6 +1133,81 @@ function StickySurveyScale({ scale, isVisible }: StickySurveyScaleProps) {
   )
 }
 
+
+type MobileChecklistDialogProps = {
+  sections: SurveyQuestionnaireForm["sections"]
+  scale: ReturnType<typeof normalizeScale>
+  answers: Record<string, LikertValue>
+  updateAnswer: (itemId: string, rating: LikertValue) => void
+  onClose: () => void
+}
+
+function MobileChecklistDialog({ sections, scale, answers, updateAnswer, onClose }: MobileChecklistDialogProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-slate-950/70 px-3 pt-8 backdrop-blur-sm sm:hidden" role="dialog" aria-modal="true">
+      <section className="flex max-h-screen w-full max-w-xs flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl shadow-slate-950/30">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4">
+          <div className="min-w-0">
+            <p className="max-w-xs truncate text-xs font-black uppercase tracking-wide text-cyan-700">Checklist Evaluation</p>
+            <h3 className="mt-1 max-w-xs truncate text-lg font-black text-slate-950">Answer Items</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-100"
+            aria-label="Close checklist"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4 overflow-y-auto px-4 py-4">
+          {sections.map((section) => (
+            <section key={section.id} className="space-y-3">
+              <h4 className="max-w-xs rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white wrap-anywhere">
+                {section.title}
+              </h4>
+
+              {section.items.map((item, index) => (
+                <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="max-w-xs text-sm font-bold leading-6 text-slate-950 wrap-anywhere">
+                    {index + 1}. {item.statement}
+                    {item.isRequired ? <span className="ml-1 text-red-500">*</span> : null}
+                  </p>
+
+                  <div className="mt-3 grid gap-2">
+                    {scale.map((option) => {
+                      const isSelected = answers[item.id] === option.value
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => updateAnswer(item.id, option.value)}
+                          className={`flex min-w-0 items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm font-black transition ${
+                            isSelected ? "bg-cyan-600 text-white" : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-cyan-50"
+                          }`}
+                          aria-label={`${item.statement}: ${option.label}`}
+                          aria-pressed={isSelected}
+                        >
+                          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-base">
+                            {isSelected ? <CheckCircle2 className="size-5" /> : option.value}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </section>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
 type FragmentSectionProps = {
   sectionTitle: string
   items: SurveyQuestionnaireForm["sections"][number]["items"]
@@ -1107,13 +1220,13 @@ function FragmentSection({ sectionTitle, items, scale, answers, updateAnswer }: 
   return (
     <>
       <tr className="bg-slate-950 text-white">
-        <td colSpan={scale.length + 1} className="px-4 py-3 font-black">
+        <td colSpan={scale.length + 1} className="px-4 py-3 font-black wrap-anywhere">
           {sectionTitle}
         </td>
       </tr>
       {items.map((item, index) => (
         <tr key={item.id} className="border-t border-slate-200 align-top">
-          <td className="px-4 py-4 text-slate-700">
+          <td className="px-4 py-4 text-slate-700 wrap-anywhere">
             <span className="font-bold text-slate-950">{index + 1}. </span>
             {item.statement}
             {item.isRequired ? <span className="ml-1 text-red-500">*</span> : null}

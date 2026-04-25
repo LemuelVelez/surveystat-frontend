@@ -212,26 +212,26 @@ export function Preview<T extends object>({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm">
-      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-950/30">
-        <div className="flex flex-col gap-4 bg-slate-950 p-6 text-white lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-start gap-3">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 px-3 py-3 backdrop-blur-sm sm:items-center sm:px-4 sm:py-6" role="dialog" aria-modal="true">
+      <div className="flex max-h-[92vh] w-full max-w-xs flex-col overflow-hidden rounded-2xl bg-white shadow-2xl shadow-slate-950/30 sm:max-w-6xl sm:rounded-3xl">
+        <div className="flex flex-col gap-4 bg-slate-950 p-4 text-white sm:p-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-400 text-slate-950">
               <Maximize2 className="size-5" />
             </span>
             <div>
-              <p className="text-xs font-black uppercase tracking-widest text-cyan-200">Preview</p>
-              <h2 className="mt-1 text-2xl font-black tracking-tight">{title}</h2>
-              {subtitle ? <p className="mt-2 text-sm leading-6 text-slate-300">{subtitle}</p> : null}
+              <p className="max-w-xs truncate text-xs font-black uppercase tracking-widest text-cyan-200 sm:max-w-none">Preview</p>
+              <h2 className="mt-1 line-clamp-2 max-w-xs text-xl font-black tracking-tight wrap-anywhere sm:max-w-none sm:text-2xl">{title}</h2>
+              {subtitle ? <p className="mt-2 line-clamp-2 max-w-xs text-sm leading-6 text-slate-300 wrap-anywhere sm:max-w-none">{subtitle}</p> : null}
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap">
             <button
               type="button"
               onClick={downloadExcel}
               disabled={isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-400 px-4 py-2.5 text-sm font-black text-emerald-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-400 px-4 py-2.5 text-sm font-black text-emerald-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 sm:w-auto"
             >
               <FileSpreadsheet className="size-4" />
               Download Excel
@@ -240,7 +240,7 @@ export function Preview<T extends object>({
               type="button"
               onClick={downloadPdf}
               disabled={isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-2.5 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-2.5 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 sm:w-auto"
             >
               <FileText className="size-4" />
               Download PDF
@@ -248,7 +248,7 @@ export function Preview<T extends object>({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/10 p-2.5 text-white transition hover:bg-white/20"
+              className="inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-white/10 p-2.5 text-white transition hover:bg-white/20 sm:w-auto"
               aria-label="Close preview"
             >
               <X className="size-5" />
@@ -256,13 +256,13 @@ export function Preview<T extends object>({
           </div>
         </div>
 
-        <div className="overflow-y-auto p-6">
+        <div className="overflow-y-auto p-4 sm:p-6">
           {summary.length > 0 ? (
             <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {summary.map((item) => (
                 <div key={item.label} className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
-                  <p className="text-xs font-black uppercase tracking-wide text-cyan-700">{item.label}</p>
-                  <p className="mt-2 wrap-break-word text-lg font-black text-slate-950">{item.value ?? "—"}</p>
+                  <p className="max-w-xs truncate text-xs font-black uppercase tracking-wide text-cyan-700 sm:max-w-none">{item.label}</p>
+                  <p className="mt-2 max-w-xs text-lg font-black text-slate-950 wrap-anywhere sm:max-w-none">{item.value ?? "—"}</p>
                 </div>
               ))}
             </div>
@@ -280,7 +280,23 @@ export function Preview<T extends object>({
                 No rows available to preview.
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                <div className="space-y-3 sm:hidden">
+                  {rows.map((row, rowIndex) => (
+                    <div key={rowIndex} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                      {columns.map((column) => (
+                        <div key={String(column.key)} className="border-b border-slate-100 py-2 last:border-b-0">
+                          <p className="max-w-xs truncate text-xs font-black uppercase tracking-wide text-slate-500">{column.header}</p>
+                          <p className="mt-1 max-w-xs text-sm font-semibold text-slate-800 wrap-anywhere">
+                            {getCellValue(row, column, rowIndex)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden overflow-x-auto sm:block">
                 <table className="w-full min-w-full border-collapse text-left text-sm">
                   <thead className="bg-slate-950 text-white">
                     <tr>
@@ -304,15 +320,16 @@ export function Preview<T extends object>({
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
 
-          <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <div className="mt-5 flex flex-col justify-end gap-2 sm:flex-row sm:flex-wrap">
             <button
               type="button"
               onClick={downloadExcel}
               disabled={isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               <Download className="size-4" />
               Excel
@@ -321,7 +338,7 @@ export function Preview<T extends object>({
               type="button"
               onClick={downloadPdf}
               disabled={isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm font-black text-cyan-700 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm font-black text-cyan-700 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             >
               <Download className="size-4" />
               PDF

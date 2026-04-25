@@ -119,12 +119,12 @@ type DialogShellProps = {
 
 function DialogShell({ title, description, children, footer, onClose }: DialogShellProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-4 backdrop-blur">
-      <section className="max-h-[95svh] w-full max-w-4xl overflow-auto rounded-3xl border border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/60">
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-white/10 bg-slate-950/95 px-6 py-5 backdrop-blur">
-          <div>
-            <h2 className="text-2xl font-black tracking-tight">{title}</h2>
-            {description ? <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">{description}</p> : null}
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/80 px-3 py-3 backdrop-blur sm:items-center sm:px-4 sm:py-4" role="dialog" aria-modal="true">
+      <section className="max-h-[95svh] w-full max-w-xs overflow-auto rounded-2xl border border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/60 sm:max-w-4xl sm:rounded-3xl">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-4 py-4 backdrop-blur sm:gap-4 sm:px-6 sm:py-5">
+          <div className="min-w-0">
+            <h2 className="max-w-xs truncate text-xl font-black tracking-tight sm:max-w-none sm:text-2xl">{title}</h2>
+            {description ? <p className="mt-2 max-w-xs text-sm leading-6 text-slate-300 wrap-anywhere sm:max-w-2xl">{description}</p> : null}
           </div>
           <button
             type="button"
@@ -135,10 +135,10 @@ function DialogShell({ title, description, children, footer, onClose }: DialogSh
           </button>
         </div>
 
-        <div className="px-6 py-6">{children}</div>
+        <div className="px-4 py-4 sm:px-6 sm:py-6">{children}</div>
 
         {footer ? (
-          <div className="sticky bottom-0 border-t border-white/10 bg-slate-950/95 px-6 py-5 backdrop-blur">
+          <div className="sticky bottom-0 border-t border-white/10 bg-slate-950/95 px-4 py-4 backdrop-blur sm:px-6 sm:py-5">
             {footer}
           </div>
         ) : null}
@@ -352,13 +352,13 @@ export function Landing() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 py-8 lg:px-8">
-        <nav className="sticky top-4 z-40 flex items-center justify-between rounded-3xl border border-white/10 bg-slate-950/80 px-5 py-4 shadow-2xl shadow-slate-950/30 backdrop-blur">
-          <Link to="/" className="flex items-center gap-3 font-semibold tracking-tight">
-            <span className="flex size-12 items-center justify-center rounded-2xl bg-white p-2 shadow-lg shadow-cyan-400/20">
+      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-3 py-4 sm:px-6 sm:py-8 lg:px-8">
+        <nav className="sticky top-4 z-40 flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-3 shadow-2xl shadow-slate-950/30 backdrop-blur sm:rounded-3xl sm:px-5 sm:py-4">
+          <Link to="/" className="flex min-w-0 items-center gap-3 font-semibold tracking-tight">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white p-2 shadow-lg shadow-cyan-400/20 sm:size-12">
               <img src={logoUrl} alt="SurveyStat logo" className="size-full object-contain" />
             </span>
-            <span className="text-xl">SurveyStat</span>
+            <span className="max-w-xs truncate text-xl sm:max-w-none">SurveyStat</span>
           </Link>
 
           <div className="hidden items-center gap-3 md:flex">
@@ -405,7 +405,7 @@ export function Landing() {
           </div>
         </nav>
 
-        <div className="mt-4 flex flex-col gap-3 md:hidden">
+        <div className="mx-auto mt-4 flex w-full max-w-xs flex-col gap-3 md:hidden">
           <button
             type="button"
             onClick={openExistingSurveysDialog}
@@ -431,15 +431,15 @@ export function Landing() {
           </Link>
         </div>
 
-        <div className="grid flex-1 items-center gap-12 py-16 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="grid flex-1 items-center gap-8 py-10 sm:gap-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm font-medium text-cyan-100">
-              <ShieldCheck className="size-4" />
+            <div className="inline-flex max-w-xs items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm font-medium text-cyan-100 wrap-anywhere sm:max-w-none">
+              <ShieldCheck className="size-4 shrink-0" />
               Digital repository survey and statistical dashboard
             </div>
 
             <div className="space-y-6">
-              <h1 className="max-w-4xl text-5xl font-black tracking-tight text-white md:text-7xl">
+              <h1 className="max-w-xs text-3xl font-black tracking-tight text-white wrap-anywhere sm:max-w-4xl sm:text-5xl md:text-7xl">
                 Collect accreditation survey responses and evaluate results faster.
               </h1>
             </div>
@@ -447,15 +447,15 @@ export function Landing() {
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-sm text-slate-400">Active Surveys</p>
-                <p className="mt-2 text-3xl font-black">{isLoading ? "—" : getSurveyItemTotal(forms)}</p>
+                <p className="mt-2 max-w-xs truncate text-3xl font-black sm:max-w-none">{isLoading ? "—" : getSurveyItemTotal(forms)}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-sm text-slate-400">Responses</p>
-                <p className="mt-2 text-3xl font-black">{formatNumber(summary?.responseCount)}</p>
+                <p className="mt-2 max-w-xs truncate text-3xl font-black sm:max-w-none">{formatNumber(summary?.responseCount)}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-sm text-slate-400">Weighted Mean</p>
-                <p className="mt-2 text-3xl font-black">{formatNumber(summary?.weightedMean, 2)}</p>
+                <p className="mt-2 max-w-xs truncate text-3xl font-black sm:max-w-none">{formatNumber(summary?.weightedMean, 2)}</p>
               </div>
             </div>
 
@@ -492,14 +492,14 @@ export function Landing() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-2xl shadow-cyan-950/50 backdrop-blur">
-            <div className="rounded-2xl bg-slate-900 p-5">
-              <div className="mb-6 flex items-center justify-between gap-4">
-                <div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-3 shadow-2xl shadow-cyan-950/50 backdrop-blur sm:rounded-3xl sm:p-4">
+            <div className="rounded-2xl bg-slate-900 p-4 sm:p-5">
+              <div className="mb-6 flex items-start justify-between gap-3 sm:gap-4">
+                <div className="min-w-0">
                   <p className="text-sm text-slate-400">Survey Summary</p>
-                  <h2 className="text-2xl font-bold">{highlightedSurvey?.title ?? "Active Survey Forms"}</h2>
+                  <h2 className="mt-1 line-clamp-2 max-w-xs text-xl font-bold wrap-anywhere sm:max-w-none sm:text-2xl">{highlightedSurvey?.title ?? "Active Survey Forms"}</h2>
                 </div>
-                <div className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm font-semibold text-emerald-300">
+                <div className="shrink-0 rounded-full bg-emerald-400/10 px-3 py-1 text-sm font-semibold text-emerald-300">
                   Live Data
                 </div>
               </div>
@@ -521,7 +521,7 @@ export function Landing() {
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                       <p className="text-sm text-slate-400">Interpretation</p>
-                      <p className="mt-2 text-2xl font-black">{summary?.interpretation ?? "—"}</p>
+                      <p className="mt-2 max-w-xs truncate text-2xl font-black sm:max-w-none">{summary?.interpretation ?? "—"}</p>
                     </div>
                   </div>
 
@@ -536,15 +536,15 @@ export function Landing() {
                         }}
                         className="block w-full rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-300/50 hover:bg-cyan-300/10"
                       >
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
+                        <div className="flex items-start justify-between gap-3 sm:gap-4">
+                          <div className="min-w-0">
                             <p className="text-xs font-black uppercase tracking-wide text-cyan-200">
                               Survey {form.surveyStepNumber || index + 1}
                             </p>
-                            <h3 className="mt-1 font-bold">{form.title}</h3>
-                            <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-400">{form.description}</p>
+                            <h3 className="mt-1 line-clamp-2 max-w-xs font-bold wrap-anywhere sm:max-w-none">{form.title}</h3>
+                            <p className="mt-1 line-clamp-2 max-w-xs text-sm leading-6 text-slate-400 wrap-anywhere sm:max-w-none">{form.description}</p>
                           </div>
-                          <span className="rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-200">
+                          <span className="shrink-0 rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-200">
                             {form.respondentInformationRequired ? "Info required" : "Info off"}
                           </span>
                         </div>
@@ -560,8 +560,8 @@ export function Landing() {
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">
                       <feature.icon className="size-5" />
                     </span>
-                    <div className="flex min-h-10 items-center">
-                      <h3 className="font-bold">{feature.title}</h3>
+                    <div className="flex min-h-10 min-w-0 items-center">
+                      <h3 className="max-w-xs truncate font-bold sm:max-w-none">{feature.title}</h3>
                     </div>
                   </div>
                 ))}
@@ -577,14 +577,14 @@ export function Landing() {
           onClose={() => setIsExistingSurveysDialogOpen(false)}
           footer={
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-semibold text-slate-300">
+              <p className="max-w-xs truncate text-sm font-semibold text-slate-300 sm:max-w-none">
                 {selectedExistingSurveys.length} selected survey{selectedExistingSurveys.length === 1 ? "" : "s"}
               </p>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
                   onClick={() => copySurveyShareLink(selectedSurveyCodes)}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10"
+                  className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10 sm:w-auto sm:max-w-none"
                 >
                   <Copy className="size-4" />
                   Copy Share Link
@@ -592,7 +592,7 @@ export function Landing() {
                 <button
                   type="button"
                   onClick={startSelectedSurveys}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300"
+                  className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 sm:w-auto sm:max-w-none"
                 >
                   <ArrowUpRight className="size-4" />
                   Start Selected
@@ -646,15 +646,15 @@ export function Landing() {
                   }`}
                 >
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <button type="button" onClick={() => toggleExistingSurvey(form.code)} className="flex-1 text-left">
+                    <button type="button" onClick={() => toggleExistingSurvey(form.code)} className="min-w-0 flex-1 text-left">
                       <span className="text-xs font-black uppercase tracking-wide text-cyan-200">
                         Survey {form.surveyStepNumber || index + 1}
                       </span>
-                      <span className="mt-1 block text-lg font-black">{form.title}</span>
-                      <span className="mt-2 line-clamp-2 block text-sm leading-6 text-slate-400">{form.description}</span>
+                      <span className="mt-1 block max-w-xs truncate text-lg font-black sm:max-w-none">{form.title}</span>
+                      <span className="mt-2 line-clamp-2 block max-w-xs text-sm leading-6 text-slate-400 wrap-anywhere sm:max-w-none">{form.description}</span>
                     </button>
 
-                    <div className="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end">
+                    <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end sm:gap-3">
                       <span
                         className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
                           isSelected ? "bg-cyan-400 text-slate-950" : "bg-white/10 text-slate-500"
@@ -665,7 +665,7 @@ export function Landing() {
                       <button
                         type="button"
                         onClick={() => copySurveyShareLink([form.code])}
-                        className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-200 transition hover:bg-white/15 hover:text-white"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white/10 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-200 transition hover:bg-white/15 hover:text-white sm:w-auto"
                       >
                         <Link2 className="size-3.5" />
                         Share
@@ -676,7 +676,7 @@ export function Landing() {
                         aria-checked={form.respondentInformationRequired}
                         disabled={isUpdatingRespondentInfo}
                         onClick={() => toggleExistingSurveyRespondentInformation(form)}
-                        className={`inline-flex items-center gap-3 rounded-full px-3 py-2 text-xs font-black uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                        className={`inline-flex w-full items-center justify-center gap-3 rounded-full px-3 py-2 text-xs font-black uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto ${
                           form.respondentInformationRequired ? "bg-cyan-400 text-slate-950" : "bg-white/10 text-slate-300"
                         }`}
                       >
@@ -708,7 +708,7 @@ export function Landing() {
           onClose={() => setIsCreateSurveyDialogOpen(false)}
           footer={
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-semibold text-slate-300">
+              <p className="max-w-xs truncate text-sm font-semibold text-slate-300 sm:max-w-none">
                 {createMode === "series" ? `${surveyStepCount} survey steps will be created.` : "One survey will be created."}
               </p>
               <button
@@ -756,7 +756,7 @@ export function Landing() {
               <input
                 value={createSurveyTitle}
                 onChange={(event) => setCreateSurveyTitle(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10"
+                className="mt-2 w-full max-w-xs rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10 sm:max-w-none"
                 placeholder="Enter survey title"
               />
             </label>
@@ -766,7 +766,7 @@ export function Landing() {
               <textarea
                 value={createSurveyDescription}
                 onChange={(event) => setCreateSurveyDescription(event.target.value)}
-                className="mt-2 min-h-28 w-full resize-y rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10"
+                className="mt-2 min-h-28 w-full max-w-xs resize-y rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10 sm:max-w-none"
                 placeholder="Describe the purpose of the survey"
               />
             </label>
@@ -798,7 +798,7 @@ export function Landing() {
               role="switch"
               aria-checked={respondentInformationRequired}
               onClick={() => setRespondentInformationRequired((current) => !current)}
-              className={`flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition ${
+              className={`flex w-full max-w-xs items-center justify-between gap-4 rounded-2xl border p-4 text-left transition sm:max-w-none ${
                 respondentInformationRequired
                   ? "border-cyan-300 bg-cyan-300/10"
                   : "border-white/10 bg-white/5 hover:bg-white/10"
