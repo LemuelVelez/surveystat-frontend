@@ -267,21 +267,52 @@ function getCalculationSteps(value: unknown): CalculationStep[] {
     .filter((step): step is CalculationStep => Boolean(step))
 }
 
+function normalizeStatisticsText(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase()
+}
+
+function getItemOrderValue(item: SurveyItemStatistics) {
+  const itemRecord = getRecord(item)
+  const explicitOrder = toNumber(itemRecord?.order ?? itemRecord?.sortOrder ?? itemRecord?.itemOrder, Number.NaN)
+
+  if (Number.isFinite(explicitOrder)) {
+    return explicitOrder
+  }
+
+  const itemCode = String(item.itemCode ?? "")
+  const numericCode = Number(itemCode.match(/\d+/)?.[0] ?? Number.NaN)
+
+  return Number.isFinite(numericCode) ? numericCode : Number.MAX_SAFE_INTEGER
+}
+
 function getSectionItemStatistics(section: SurveySectionStatistics, items: SurveyItemStatistics[]) {
   const sectionRecord = getRecord(section)
   const sectionId = String(sectionRecord?.sectionId ?? "").trim()
-  const sectionTitle = section.sectionTitle.trim()
+  const sectionTitle = normalizeStatisticsText(section.sectionTitle)
 
-  return items.filter((item) => {
-    const itemRecord = getRecord(item)
-    const itemSectionId = String(itemRecord?.sectionId ?? "").trim()
+  return items
+    .filter((item) => {
+      const itemRecord = getRecord(item)
+      const itemSectionId = String(itemRecord?.sectionId ?? "").trim()
 
-    if (sectionId && itemSectionId) {
-      return itemSectionId === sectionId
-    }
+      if (sectionId && itemSectionId) {
+        return itemSectionId === sectionId
+      }
 
-    return item.sectionTitle.trim() === sectionTitle
-  })
+      return normalizeStatisticsText(item.sectionTitle) === sectionTitle
+    })
+    .sort((firstItem, secondItem) => {
+      const orderDifference = getItemOrderValue(firstItem) - getItemOrderValue(secondItem)
+
+      if (orderDifference !== 0) {
+        return orderDifference
+      }
+
+      return String(firstItem.itemCode ?? "").localeCompare(String(secondItem.itemCode ?? ""), undefined, {
+        numeric: true,
+        sensitivity: "base",
+      })
+    })
 }
 
 function createSectionCalculation(section: SurveySectionStatistics, items: SurveyItemStatistics[]): SectionSolution {
@@ -1052,7 +1083,7 @@ function SectionSolutionDialog({ section, items, solution, onClose }: SectionSol
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       <button
         type="button"
         aria-label="Close section solution dialog"
@@ -1063,9 +1094,9 @@ function SectionSolutionDialog({ section, items, solution, onClose }: SectionSol
         role="dialog"
         aria-modal="true"
         aria-labelledby="section-solution-title"
-        className="relative z-10 max-h-screen w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl"
+        className="relative z-10 flex max-h-[calc(100svh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-6">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 p-4 sm:p-6">
           <div>
             <p className="text-sm font-black uppercase tracking-wide text-cyan-700">Section Detailed Solution</p>
             <h2 id="section-solution-title" className="mt-1 text-2xl font-black tracking-tight text-slate-950">
@@ -1082,7 +1113,7 @@ function SectionSolutionDialog({ section, items, solution, onClose }: SectionSol
           </button>
         </div>
 
-        <div className="max-h-screen overflow-y-auto p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-8 sm:p-6 sm:pb-8">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <SummaryCard label="Answers" value={solution.answerCount} />
             <SummaryCard label="Weighted Mean" value={formatNumber(section.weightedMean)} />

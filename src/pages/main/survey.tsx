@@ -15,7 +15,6 @@ import {
   Upload,
   Camera,
   UserRound,
-  X,
 } from "lucide-react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
@@ -145,7 +144,6 @@ export function Survey() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
   const [showStickyScale, setShowStickyScale] = useState(false)
-  const [isChecklistDialogOpen, setIsChecklistDialogOpen] = useState(false)
   const [missingRequiredItemIds, setMissingRequiredItemIds] = useState<string[]>([])
   const checklistTableRef = useRef<HTMLDivElement>(null)
   const checklistScaleHeaderRef = useRef<HTMLTableSectionElement>(null)
@@ -292,7 +290,6 @@ export function Survey() {
   }, [currentQuestionnaire, currentCode])
 
   useEffect(() => {
-    setIsChecklistDialogOpen(false)
     setMissingRequiredItemIds([])
     checklistItemRefs.current = {}
   }, [currentCode])
@@ -304,10 +301,10 @@ export function Survey() {
 
     const timeoutId = window.setTimeout(() => {
       scrollToChecklistItem(firstMissingItemId)
-    }, isChecklistDialogOpen ? 120 : 0)
+    }, 0)
 
     return () => window.clearTimeout(timeoutId)
-  }, [isChecklistDialogOpen, missingRequiredItemIds])
+  }, [missingRequiredItemIds])
 
   function updateCurrentDraft(updater: (current: SurveyDraft) => SurveyDraft) {
     if (!currentQuestionnaire) return
@@ -368,10 +365,6 @@ export function Survey() {
 
     setMissingRequiredItemIds(missingItemIds)
 
-    if (typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches) {
-      setIsChecklistDialogOpen(true)
-    }
-
     toast.error("Please answer the highlighted required checklist item.")
   }
 
@@ -431,6 +424,16 @@ export function Survey() {
 
     if (!currentQuestionnaire) {
       toast.error("Please select a survey first.")
+      return
+    }
+
+    const firstIncompletePreviousSurveyIndex = questionnaires.findIndex(
+      (questionnaire, index) => index < currentSurveyIndex && !drafts[questionnaire.code]?.isSubmitted,
+    )
+
+    if (firstIncompletePreviousSurveyIndex !== -1) {
+      setCurrentSurveyIndex(firstIncompletePreviousSurveyIndex)
+      toast.error(`Please complete Survey ${firstIncompletePreviousSurveyIndex + 1} before proceeding.`)
       return
     }
 
@@ -543,16 +546,27 @@ export function Survey() {
 
         <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {questionnaires.length > 0 ? (
-            questionnaires.map((questionnaire, index) => (
-              <SurveyStepCard
-                key={questionnaire.id}
-                step={index + 1}
-                title={questionnaire.title}
-                isActive={currentSurveyIndex === index}
-                isComplete={Boolean(drafts[questionnaire.code]?.isSubmitted)}
-                onClick={() => setCurrentSurveyIndex(index)}
-              />
-            ))
+            questionnaires.map((questionnaire, index) => {
+              const isStepAccessible = questionnaires
+                .slice(0, index)
+                .every((previousQuestionnaire) => drafts[previousQuestionnaire.code]?.isSubmitted)
+
+              return (
+                <SurveyStepCard
+                  key={questionnaire.id}
+                  step={index + 1}
+                  title={questionnaire.title}
+                  isActive={currentSurveyIndex === index}
+                  isComplete={Boolean(drafts[questionnaire.code]?.isSubmitted)}
+                  isLocked={!isStepAccessible}
+                  onClick={() => {
+                    if (isStepAccessible) {
+                      setCurrentSurveyIndex(index)
+                    }
+                  }}
+                />
+              )
+            })
           ) : (
             <>
               <SurveyStepCard step={1} title="Survey 1" isActive isComplete={false} onClick={() => undefined} />
@@ -606,8 +620,12 @@ export function Survey() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setCurrentSurveyIndex((current) => Math.min(current + 1, questionnaires.length - 1))}
-                        disabled={currentSurveyIndex === questionnaires.length - 1}
+                        onClick={() => {
+                          if (currentDraft.isSubmitted) {
+                            setCurrentSurveyIndex((current) => Math.min(current + 1, questionnaires.length - 1))
+                          }
+                        }}
+                        disabled={currentSurveyIndex === questionnaires.length - 1 || !currentDraft.isSubmitted}
                         className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                       >
                         Next Survey
@@ -743,15 +761,7 @@ export function Survey() {
                     <StickySurveyScale scale={scale} isVisible={showStickyScale} />
 
                     <div className="border-t border-slate-100 p-4 sm:hidden">
-                      <button
-                        type="button"
-                        onClick={() => setIsChecklistDialogOpen(true)}
-                        className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-600"
-                      >
-                        <ClipboardList className="size-4" />
-                        Click Me to Answer
-                      </button>
-                      <div className="mt-3 grid max-w-xs gap-2">
+                      <div className="grid gap-2">
                         {scale.map((option) => (
                           <span
                             key={option.value}
@@ -762,6 +772,15 @@ export function Survey() {
                           </span>
                         ))}
                       </div>
+
+                      <MobileChecklistPanel
+                        sections={currentQuestionnaire.sections}
+                        scale={scale}
+                        answers={currentDraft.answers}
+                        updateAnswer={updateAnswer}
+                        missingRequiredItemIds={missingRequiredItemIdSet}
+                        setChecklistItemRef={setChecklistItemRef}
+                      />
                     </div>
 
                     <div ref={checklistTableRef} className="hidden overflow-x-auto sm:block">
@@ -794,18 +813,6 @@ export function Survey() {
                       </table>
                     </div>
                   </div>
-
-                  {isChecklistDialogOpen ? (
-                    <MobileChecklistDialog
-                      sections={currentQuestionnaire.sections}
-                      scale={scale}
-                      answers={currentDraft.answers}
-                      updateAnswer={updateAnswer}
-                      missingRequiredItemIds={missingRequiredItemIdSet}
-                      setChecklistItemRef={setChecklistItemRef}
-                      onClose={() => setIsChecklistDialogOpen(false)}
-                    />
-                  ) : null}
 
                   <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                     <SignatureCapture
@@ -1187,15 +1194,17 @@ type SurveyStepCardProps = {
   title: string
   isActive: boolean
   isComplete: boolean
+  isLocked?: boolean
   onClick: () => void
 }
 
-function SurveyStepCard({ step, title, isActive, isComplete, onClick }: SurveyStepCardProps) {
+function SurveyStepCard({ step, title, isActive, isComplete, isLocked = false, onClick }: SurveyStepCardProps) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`w-full max-w-xs rounded-2xl border p-4 text-left transition sm:max-w-none ${
+      disabled={isLocked}
+      className={`w-full max-w-xs rounded-2xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60 sm:max-w-none ${
         isActive ? "border-cyan-400 bg-cyan-50 shadow-sm" : "border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50/50"
       }`}
     >
@@ -1248,102 +1257,77 @@ function StickySurveyScale({ scale, isVisible }: StickySurveyScaleProps) {
 }
 
 
-type MobileChecklistDialogProps = {
+type MobileChecklistPanelProps = {
   sections: SurveyQuestionnaireForm["sections"]
   scale: ReturnType<typeof normalizeScale>
   answers: Record<string, LikertValue>
   updateAnswer: (itemId: string, rating: LikertValue) => void
   missingRequiredItemIds: Set<string>
   setChecklistItemRef: (itemId: string, element: HTMLDivElement | HTMLTableRowElement | null) => void
-  onClose: () => void
 }
 
-function MobileChecklistDialog({
+function MobileChecklistPanel({
   sections,
   scale,
   answers,
   updateAnswer,
   missingRequiredItemIds,
   setChecklistItemRef,
-  onClose,
-}: MobileChecklistDialogProps) {
+}: MobileChecklistPanelProps) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-3 py-4 backdrop-blur-sm sm:hidden"
-      role="dialog"
-      aria-modal="true"
-    >
-      <section className="flex max-h-[calc(100svh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-950/30">
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4">
-          <div className="min-w-0">
-            <p className="max-w-xs truncate text-xs font-black uppercase tracking-wide text-cyan-700">Checklist Evaluation</p>
-            <h3 className="mt-1 max-w-xs truncate text-lg font-black text-slate-950">Answer Items</h3>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-100"
-            aria-label="Close checklist"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
+    <div className="mt-4 space-y-4">
+      {sections.map((section) => (
+        <section key={section.id} className="space-y-3">
+          <h4 className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white wrap-anywhere">
+            {section.title}
+          </h4>
 
-        <div className="space-y-4 overflow-y-auto px-4 py-4">
-          {sections.map((section) => (
-            <section key={section.id} className="space-y-3">
-              <h4 className="max-w-xs rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white wrap-anywhere">
-                {section.title}
-              </h4>
+          {section.items.map((item, index) => {
+            const isMissing = missingRequiredItemIds.has(item.id)
 
-              {section.items.map((item, index) => {
-                const isMissing = missingRequiredItemIds.has(item.id)
+            return (
+              <div
+                key={item.id}
+                ref={(element) => setChecklistItemRef(item.id, element)}
+                tabIndex={isMissing ? -1 : undefined}
+                aria-invalid={isMissing || undefined}
+                className={`rounded-2xl border p-3 outline-none transition ${
+                  isMissing ? "border-red-500 bg-red-50 ring-4 ring-red-100" : "border-slate-200 bg-slate-50"
+                }`}
+              >
+                <p className="text-sm font-bold leading-6 text-slate-950 wrap-anywhere">
+                  {index + 1}. {item.statement}
+                  {item.isRequired ? <span className="ml-1 text-red-500">*</span> : null}
+                </p>
 
-                return (
-                  <div
-                    key={item.id}
-                    ref={(element) => setChecklistItemRef(item.id, element)}
-                    tabIndex={isMissing ? -1 : undefined}
-                    aria-invalid={isMissing || undefined}
-                    className={`rounded-2xl border p-3 outline-none transition ${
-                      isMissing ? "border-red-500 bg-red-50 ring-4 ring-red-100" : "border-slate-200 bg-slate-50"
-                    }`}
-                  >
-                  <p className="max-w-xs text-sm font-bold leading-6 text-slate-950 wrap-anywhere">
-                    {index + 1}. {item.statement}
-                    {item.isRequired ? <span className="ml-1 text-red-500">*</span> : null}
-                  </p>
+                <div className="mt-3 grid gap-2">
+                  {scale.map((option) => {
+                    const isSelected = answers[item.id] === option.value
 
-                  <div className="mt-3 grid gap-2">
-                    {scale.map((option) => {
-                      const isSelected = answers[item.id] === option.value
-
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => updateAnswer(item.id, option.value)}
-                          className={`flex min-w-0 items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm font-black transition ${
-                            isSelected ? "bg-cyan-600 text-white" : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-cyan-50"
-                          }`}
-                          aria-label={`${item.statement}: ${option.label}`}
-                          aria-pressed={isSelected}
-                        >
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-base">
-                            {isSelected ? <CheckCircle2 className="size-5" /> : option.value}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                  </div>
-                )
-              })}
-            </section>
-          ))}
-        </div>
-      </section>
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => updateAnswer(item.id, option.value)}
+                        className={`flex min-w-0 items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm font-black transition ${
+                          isSelected ? "bg-cyan-600 text-white" : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-cyan-50"
+                        }`}
+                        aria-label={`${item.statement}: ${option.label}`}
+                        aria-pressed={isSelected}
+                      >
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-base">
+                          {isSelected ? <CheckCircle2 className="size-5" /> : option.value}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </section>
+      ))}
     </div>
   )
 }
