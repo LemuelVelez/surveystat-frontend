@@ -285,12 +285,16 @@ const ENV = (import.meta as unknown as {
   env?: Record<string, string | undefined>
 }).env
 
-const ENV_API_URL = ENV?.SurveyStat_URL || ENV?.VITE_SURVEYSTAT_API_URL || ENV?.VITE_API_URL
+const PROCESS_ENV = (globalThis as unknown as {
+  process?: {
+    env?: Record<string, string | undefined>
+  }
+}).process?.env
+
+const ENV_API_URL = ENV?.SurveyStat_URL || PROCESS_ENV?.SurveyStat_URL
 const ENV_SYSTEM_URL = ENV?.VITE_ACREDIFY_SYSTEM_URL || ENV?.VITE_SYSTEM_URL
 
-const DEFAULT_API_URL = "http://localhost:8080"
-
-export const SURVEYSTAT_API_URL = normalizeBaseUrl(ENV_API_URL || DEFAULT_API_URL)
+export const SURVEYSTAT_API_URL = resolveRequiredUrl(ENV_API_URL, "SurveyStat_URL")
 export const ACREDIFY_SYSTEM_URL = normalizeOptionalUrl(ENV_SYSTEM_URL)
 
 export class SurveyStatApiError extends Error {
@@ -306,7 +310,7 @@ export class SurveyStatApiError extends Error {
 }
 
 function normalizeBaseUrl(url: string) {
-  return url.replace(/\/+$/, "")
+  return url.trim().replace(/\/+$/, "")
 }
 
 function normalizeOptionalUrl(url?: string) {
@@ -317,6 +321,20 @@ function normalizeOptionalUrl(url?: string) {
   }
 
   return normalizeBaseUrl(trimmed)
+}
+
+function resolveRequiredUrl(url: string | undefined, envName: string) {
+  const normalizedUrl = normalizeOptionalUrl(url)
+
+  if (!normalizedUrl) {
+    throw new SurveyStatApiError(
+      `${envName} is not configured.`,
+      500,
+      { envName },
+    )
+  }
+
+  return normalizedUrl
 }
 
 function normalizePath(path: string) {
@@ -570,7 +588,6 @@ function normalizeSurveyResponseSummary(response: SurveyResponseSummary, index: 
 function normalizeSurveyResponseSummaryList(responses: SurveyResponseSummary[]) {
   return responses.map(normalizeSurveyResponseSummary)
 }
-
 
 export const surveyStatService = {
   listSurveyForms: (activeOnly = true) =>
