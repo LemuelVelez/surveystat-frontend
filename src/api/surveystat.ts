@@ -281,22 +281,6 @@ export type SurveyResponseFilters = {
   offset?: number
 }
 
-const ENV = (import.meta as unknown as {
-  env?: Record<string, string | undefined>
-}).env
-
-const PROCESS_ENV = (globalThis as unknown as {
-  process?: {
-    env?: Record<string, string | undefined>
-  }
-}).process?.env
-
-const ENV_API_URL = ENV?.SurveyStat_URL || PROCESS_ENV?.SurveyStat_URL
-const ENV_SYSTEM_URL = ENV?.VITE_ACREDIFY_SYSTEM_URL || ENV?.VITE_SYSTEM_URL
-
-export const SURVEYSTAT_API_URL = resolveRequiredUrl(ENV_API_URL, "SurveyStat_URL")
-export const ACREDIFY_SYSTEM_URL = normalizeOptionalUrl(ENV_SYSTEM_URL)
-
 export class SurveyStatApiError extends Error {
   status: number
   payload: unknown
@@ -308,6 +292,34 @@ export class SurveyStatApiError extends Error {
     this.payload = payload
   }
 }
+
+const ENV = (import.meta as unknown as {
+  env?: Record<string, string | undefined>
+}).env
+
+const PROCESS_ENV = (globalThis as unknown as {
+  process?: {
+    env?: Record<string, string | undefined>
+  }
+}).process?.env
+
+function getEnvValue(keys: string[]) {
+  for (const key of keys) {
+    const value = ENV?.[key] || PROCESS_ENV?.[key]
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+
+  return undefined
+}
+
+const ENV_API_URL = getEnvValue(["VITE_SURVEYSTAT_URL", "SurveyStat_URL"])
+const ENV_SYSTEM_URL = getEnvValue(["VITE_ACREDIFY_SYSTEM_URL", "VITE_SYSTEM_URL"])
+
+export const SURVEYSTAT_API_URL = resolveRequiredUrl(ENV_API_URL, "VITE_SURVEYSTAT_URL or SurveyStat_URL")
+export const ACREDIFY_SYSTEM_URL = normalizeOptionalUrl(ENV_SYSTEM_URL)
 
 function normalizeBaseUrl(url: string) {
   return url.trim().replace(/\/+$/, "")
