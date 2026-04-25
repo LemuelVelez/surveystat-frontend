@@ -332,6 +332,25 @@ function renderSignatureValue(response: SurveyResponseSummary) {
   )
 }
 
+function renderSignatureSummaryValue(response: SurveyResponseSummary) {
+  const sources = getResponseSignatureImageSources(response)
+  const fallback = getResponseSignatureFallbackValue(response)
+
+  if (sources.length > 0 || fallback) {
+    return (
+      <div className="flex min-h-24 items-center">
+        <SignatureImage
+          sources={sources}
+          fallback={fallback}
+          className="max-h-24 max-w-full rounded-lg border border-slate-200 bg-white p-2"
+        />
+      </div>
+    )
+  }
+
+  return "—"
+}
+
 type SelectionCheckboxProps = {
   checked: boolean
   indeterminate?: boolean
@@ -600,7 +619,7 @@ export function Respondents() {
             { label: "Respondent", value: selectedRespondentName },
             { label: "Email", value: selectedResponse.respondentEmail || "—" },
             { label: "Role", value: selectedResponse.respondentRole || "—" },
-            { label: "Signature", value: getSignatureExportValue(selectedResponse) },
+            { label: "Signature", value: renderSignatureSummaryValue(selectedResponse) as PreviewSummaryItem["value"] },
             { label: "Answers", value: selectedResponse.answerCount },
             { label: "Weighted Mean", value: formatNumber(selectedResponse.weightedMean) },
             { label: "Interpretation", value: selectedResponse.interpretation || "No data" },
@@ -1163,3 +1182,5 @@ function GridCard({ title, rows, actions, children }: GridCardProps) {
 }
 
 export default Respondents
+
+
