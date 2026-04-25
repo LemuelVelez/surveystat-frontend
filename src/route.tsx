@@ -11,6 +11,7 @@ import * as NotFoundPageModule from "@/pages/notfound";
 import * as RespondentsPageModule from "@/pages/main/respondents";
 import * as StatisticPageModule from "@/pages/main/statistic";
 import * as SurveyPageModule from "@/pages/main/survey";
+import * as SurveyCallbackPageModule from "@/pages/main/survey-callback";
 
 type RouteModule = Record<string, unknown>;
 
@@ -49,6 +50,10 @@ const Survey = resolveRouteComponent(
   SurveyPageModule as RouteModule,
   "Survey",
 );
+const SurveyCallback = resolveRouteComponent(
+  SurveyCallbackPageModule as RouteModule,
+  "SurveyCallback",
+);
 
 function RootRoute() {
   return (
@@ -71,6 +76,10 @@ export const router = createBrowserRouter([
       {
         path: "/survey",
         element: <Survey />,
+      },
+      {
+        path: "/survey/thank-you",
+        element: <SurveyCallback />,
       },
       {
         path: "/respondents",

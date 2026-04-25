@@ -17,7 +17,7 @@ import {
   UserRound,
   X,
 } from "lucide-react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import logoUrl from "@/assets/images/logo.svg"
@@ -128,6 +128,7 @@ function getSurveyShareUrl(formCodes: string[]) {
 }
 
 export function Survey() {
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const requestedFormsParam = searchParams.get("forms") ?? ""
   const requestedFormParam = searchParams.get("form") ?? ""
@@ -145,8 +146,10 @@ export function Survey() {
   const [errorMessage, setErrorMessage] = useState("")
   const [showStickyScale, setShowStickyScale] = useState(false)
   const [isChecklistDialogOpen, setIsChecklistDialogOpen] = useState(false)
+  const [missingRequiredItemIds, setMissingRequiredItemIds] = useState<string[]>([])
   const checklistTableRef = useRef<HTMLDivElement>(null)
   const checklistScaleHeaderRef = useRef<HTMLTableSectionElement>(null)
+  const checklistItemRefs = useRef<Record<string, HTMLTableRowElement | HTMLDivElement | null>>({})
 
   useEffect(() => {
     let isMounted = true
@@ -245,14 +248,8 @@ export function Survey() {
   const scale = normalizeScale(currentQuestionnaire?.scale)
   const respondentInformationRequired = currentQuestionnaire?.respondentInformationRequired ?? true
   const respondentInformationComplete = hasRequiredRespondentInformation(currentDraft.respondent)
-  const respondentSignatureComplete = Boolean(currentDraft.respondentSignatureImage)
-  const requiredChecklistComplete = requiredItems.every((item) => currentDraft.answers[item.id])
-  const isCurrentSurveyComplete =
-    requiredChecklistComplete &&
-    currentDraft.voluntaryConsent &&
-    respondentSignatureComplete &&
-    (!respondentInformationRequired || respondentInformationComplete)
   const completedCount = questionnaires.filter((questionnaire) => drafts[questionnaire.code]?.isSubmitted).length
+  const missingRequiredItemIdSet = useMemo(() => new Set(missingRequiredItemIds), [missingRequiredItemIds])
 
   useEffect(() => {
     if (!currentQuestionnaire) {
@@ -296,7 +293,21 @@ export function Survey() {
 
   useEffect(() => {
     setIsChecklistDialogOpen(false)
+    setMissingRequiredItemIds([])
+    checklistItemRefs.current = {}
   }, [currentCode])
+
+  useEffect(() => {
+    const firstMissingItemId = missingRequiredItemIds[0]
+
+    if (!firstMissingItemId) return
+
+    const timeoutId = window.setTimeout(() => {
+      scrollToChecklistItem(firstMissingItemId)
+    }, isChecklistDialogOpen ? 120 : 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [isChecklistDialogOpen, missingRequiredItemIds])
 
   function updateCurrentDraft(updater: (current: SurveyDraft) => SurveyDraft) {
     if (!currentQuestionnaire) return
@@ -322,6 +333,8 @@ export function Survey() {
   }
 
   function updateAnswer(itemId: string, rating: LikertValue) {
+    setMissingRequiredItemIds((current) => current.filter((missingItemId) => missingItemId !== itemId))
+
     updateCurrentDraft((current) => ({
       ...current,
       answers: {
@@ -330,6 +343,36 @@ export function Survey() {
       },
       isSubmitted: false,
     }))
+  }
+
+  function setChecklistItemRef(itemId: string, element: HTMLTableRowElement | HTMLDivElement | null) {
+    if (element) {
+      checklistItemRefs.current[itemId] = element
+      return
+    }
+
+    delete checklistItemRefs.current[itemId]
+  }
+
+  function scrollToChecklistItem(itemId: string) {
+    const checklistItem = checklistItemRefs.current[itemId]
+
+    if (!checklistItem) return
+
+    checklistItem.scrollIntoView({ behavior: "smooth", block: "center" })
+    checklistItem.focus({ preventScroll: true })
+  }
+
+  function highlightMissingRequiredItems(missingItems: SurveyQuestionnaireForm["sections"][number]["items"]) {
+    const missingItemIds = missingItems.map((item) => item.id)
+
+    setMissingRequiredItemIds(missingItemIds)
+
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches) {
+      setIsChecklistDialogOpen(true)
+    }
+
+    toast.error("Please answer the highlighted required checklist item.")
   }
 
   function setIncludeRespondentInformation(value: boolean) {
@@ -391,6 +434,15 @@ export function Survey() {
       return
     }
 
+    const missingRequiredItems = requiredItems.filter((item) => !currentDraft.answers[item.id])
+
+    if (missingRequiredItems.length > 0) {
+      highlightMissingRequiredItems(missingRequiredItems)
+      return
+    }
+
+    setMissingRequiredItemIds([])
+
     if (respondentInformationRequired && !respondentInformationComplete) {
       toast.error("Please complete the required respondent information.")
       return
@@ -403,13 +455,6 @@ export function Survey() {
 
     if (!currentDraft.respondentSignatureImage) {
       toast.error("Please provide the required respondent signature.")
-      return
-    }
-
-    const missingRequiredItems = requiredItems.filter((item) => !currentDraft.answers[item.id])
-
-    if (missingRequiredItems.length > 0) {
-      toast.error("Please answer all required checklist items.")
       return
     }
 
@@ -444,6 +489,7 @@ export function Survey() {
         setCurrentSurveyIndex((current) => current + 1)
       } else {
         toast.success("Survey response series submitted successfully.")
+        navigate("/survey/thank-you", { replace: true })
       }
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -740,6 +786,8 @@ export function Survey() {
                               scale={scale}
                               answers={currentDraft.answers}
                               updateAnswer={updateAnswer}
+                              missingRequiredItemIds={missingRequiredItemIdSet}
+                              setChecklistItemRef={setChecklistItemRef}
                             />
                           ))}
                         </tbody>
@@ -753,6 +801,8 @@ export function Survey() {
                       scale={scale}
                       answers={currentDraft.answers}
                       updateAnswer={updateAnswer}
+                      missingRequiredItemIds={missingRequiredItemIdSet}
+                      setChecklistItemRef={setChecklistItemRef}
                       onClose={() => setIsChecklistDialogOpen(false)}
                     />
                   ) : null}
@@ -795,7 +845,7 @@ export function Survey() {
 
                   <button
                     type="submit"
-                    disabled={!isCurrentSurveyComplete || isSubmitting}
+                    disabled={isSubmitting}
                     className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-4 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 sm:px-6"
                   >
                     {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
@@ -1203,10 +1253,20 @@ type MobileChecklistDialogProps = {
   scale: ReturnType<typeof normalizeScale>
   answers: Record<string, LikertValue>
   updateAnswer: (itemId: string, rating: LikertValue) => void
+  missingRequiredItemIds: Set<string>
+  setChecklistItemRef: (itemId: string, element: HTMLDivElement | HTMLTableRowElement | null) => void
   onClose: () => void
 }
 
-function MobileChecklistDialog({ sections, scale, answers, updateAnswer, onClose }: MobileChecklistDialogProps) {
+function MobileChecklistDialog({
+  sections,
+  scale,
+  answers,
+  updateAnswer,
+  missingRequiredItemIds,
+  setChecklistItemRef,
+  onClose,
+}: MobileChecklistDialogProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-3 py-4 backdrop-blur-sm sm:hidden"
@@ -1236,8 +1296,19 @@ function MobileChecklistDialog({ sections, scale, answers, updateAnswer, onClose
                 {section.title}
               </h4>
 
-              {section.items.map((item, index) => (
-                <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              {section.items.map((item, index) => {
+                const isMissing = missingRequiredItemIds.has(item.id)
+
+                return (
+                  <div
+                    key={item.id}
+                    ref={(element) => setChecklistItemRef(item.id, element)}
+                    tabIndex={isMissing ? -1 : undefined}
+                    aria-invalid={isMissing || undefined}
+                    className={`rounded-2xl border p-3 outline-none transition ${
+                      isMissing ? "border-red-500 bg-red-50 ring-4 ring-red-100" : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
                   <p className="max-w-xs text-sm font-bold leading-6 text-slate-950 wrap-anywhere">
                     {index + 1}. {item.statement}
                     {item.isRequired ? <span className="ml-1 text-red-500">*</span> : null}
@@ -1266,8 +1337,9 @@ function MobileChecklistDialog({ sections, scale, answers, updateAnswer, onClose
                       )
                     })}
                   </div>
-                </div>
-              ))}
+                  </div>
+                )
+              })}
             </section>
           ))}
         </div>
@@ -1282,9 +1354,19 @@ type FragmentSectionProps = {
   scale: ReturnType<typeof normalizeScale>
   answers: Record<string, LikertValue>
   updateAnswer: (itemId: string, rating: LikertValue) => void
+  missingRequiredItemIds: Set<string>
+  setChecklistItemRef: (itemId: string, element: HTMLTableRowElement | HTMLDivElement | null) => void
 }
 
-function FragmentSection({ sectionTitle, items, scale, answers, updateAnswer }: FragmentSectionProps) {
+function FragmentSection({
+  sectionTitle,
+  items,
+  scale,
+  answers,
+  updateAnswer,
+  missingRequiredItemIds,
+  setChecklistItemRef,
+}: FragmentSectionProps) {
   return (
     <>
       <tr className="bg-slate-950 text-white">
@@ -1292,18 +1374,35 @@ function FragmentSection({ sectionTitle, items, scale, answers, updateAnswer }: 
           {sectionTitle}
         </td>
       </tr>
-      {items.map((item, index) => (
-        <tr key={item.id} className="border-t border-slate-200 align-top">
-          <td className="px-4 py-4 text-slate-700 wrap-anywhere">
+      {items.map((item, index) => {
+        const isMissing = missingRequiredItemIds.has(item.id)
+
+        return (
+          <tr
+            key={item.id}
+            ref={(element) => setChecklistItemRef(item.id, element)}
+            tabIndex={isMissing ? -1 : undefined}
+            aria-invalid={isMissing || undefined}
+            className={`border-t align-top outline-none transition ${
+              isMissing ? "border-red-500 bg-red-50 ring-2 ring-red-100" : "border-slate-200"
+            }`}
+          >
+          <td className={`px-4 py-4 text-slate-700 wrap-anywhere ${isMissing ? "border-y-2 border-l-2 border-red-500" : ""}`}>
             <span className="font-bold text-slate-950">{index + 1}. </span>
             {item.statement}
             {item.isRequired ? <span className="ml-1 text-red-500">*</span> : null}
           </td>
-          {scale.map((option) => {
+          {scale.map((option, optionIndex) => {
             const isSelected = answers[item.id] === option.value
+            const isLastOption = optionIndex === scale.length - 1
 
             return (
-              <td key={option.value} className="px-3 py-4 text-center">
+              <td
+                key={option.value}
+                className={`px-3 py-4 text-center ${
+                  isMissing ? `border-y-2 border-red-500 ${isLastOption ? "border-r-2" : ""}` : ""
+                }`}
+              >
                 <button
                   type="button"
                   onClick={() => updateAnswer(item.id, option.value)}
@@ -1320,8 +1419,9 @@ function FragmentSection({ sectionTitle, items, scale, answers, updateAnswer }: 
               </td>
             )
           })}
-        </tr>
-      ))}
+          </tr>
+        )
+      })}
     </>
   )
 }
