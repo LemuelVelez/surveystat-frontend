@@ -278,15 +278,18 @@ function getResponseSignatureFallbackValue(response: SurveyResponseSummary) {
   return getRawSignatureValues(response).find((value) => normalizeSignatureImageSources(value).length === 0) ?? ""
 }
 
-function getSignatureExportValue(response: SurveyResponseSummary) {
-  const sources = getResponseSignatureImageSources(response)
-  const dataImage = sources.find((source) => /^data:image\//i.test(source))
+function getResponseSignatureUrl(response: SurveyResponseSummary) {
+  return getResponseSignatureImageSources(response).find((source) => /^https?:\/\//i.test(source)) ?? ""
+}
 
-  if (dataImage) {
-    return "Signature image attached"
+function getSignatureExportValue(response: SurveyResponseSummary) {
+  const signatureUrl = getResponseSignatureUrl(response)
+
+  if (signatureUrl) {
+    return signatureUrl
   }
 
-  return sources[0] || getResponseSignatureFallbackValue(response) || "—"
+  return getResponseSignatureFallbackValue(response) || "—"
 }
 
 type SignatureImageProps = {
@@ -566,9 +569,8 @@ export function Respondents() {
       { key: "respondentProgram", header: "Program", getValue: (row) => row.respondentProgram || "—" },
       {
         key: "respondentSignature",
-        header: "Signature",
+        header: "Signature URL",
         getValue: (row) => getSignatureExportValue(row),
-        getImageValue: (row) => getResponseSignatureImageSources(row).find((source) => /^data:image\//i.test(source)) ?? "",
         renderValue: (row) => renderSignatureValue(row),
       },
       { key: "answerCount", header: "Answers" },
@@ -619,7 +621,11 @@ export function Respondents() {
             { label: "Respondent", value: selectedRespondentName },
             { label: "Email", value: selectedResponse.respondentEmail || "—" },
             { label: "Role", value: selectedResponse.respondentRole || "—" },
-            { label: "Signature", value: renderSignatureSummaryValue(selectedResponse) as PreviewSummaryItem["value"] },
+            {
+              label: "Signature URL",
+              value: renderSignatureSummaryValue(selectedResponse),
+              exportValue: getSignatureExportValue(selectedResponse),
+            },
             { label: "Answers", value: selectedResponse.answerCount },
             { label: "Weighted Mean", value: formatNumber(selectedResponse.weightedMean) },
             { label: "Interpretation", value: selectedResponse.interpretation || "No data" },
@@ -1182,5 +1188,3 @@ function GridCard({ title, rows, actions, children }: GridCardProps) {
 }
 
 export default Respondents
-
-
