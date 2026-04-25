@@ -38,7 +38,7 @@ const defaultScale = [
   { value: 1 as LikertValue, label: "Strongly Disagree" },
 ]
 
-const respondentRoles = ["Student", "Faculty", "QA Personnel", "Administrator", "Other"]
+const respondentRoles = ["Student", "Faculty", "QA Personnel", "Administrator"] as const
 
 type SignatureMode = "draw" | "scan"
 

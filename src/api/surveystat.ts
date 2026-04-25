@@ -454,6 +454,34 @@ function getTextRecordValue(record: Record<string, unknown>, keys: string[]) {
   return ""
 }
 
+const validRespondentRoles = new Set<RespondentRole>([
+  "Student",
+  "Faculty",
+  "QA Personnel",
+  "Administrator",
+])
+
+function normalizeRespondentRole(role?: RespondentRole | null): RespondentRole | null {
+  const normalizedRole = typeof role === "string" ? role.trim() : ""
+
+  if (!normalizedRole) {
+    return null
+  }
+
+  return validRespondentRoles.has(normalizedRole) ? normalizedRole : null
+}
+
+function normalizeRespondentPayload(respondent?: CreateRespondentPayload | null): CreateRespondentPayload | null {
+  if (!respondent) {
+    return null
+  }
+
+  return {
+    ...respondent,
+    role: normalizeRespondentRole(respondent.role),
+  }
+}
+
 function hasRespondentDetails(respondent?: CreateRespondentPayload | null) {
   if (!respondent) return false
 
@@ -467,15 +495,23 @@ function hasRespondentDetails(respondent?: CreateRespondentPayload | null) {
 }
 
 function withAnonymousRespondent(payload: SubmitSurveyResponsePayload): SubmitSurveyResponsePayload {
-  if (payload.respondentId || hasRespondentDetails(payload.respondent)) {
+  if (payload.respondentId) {
     return payload
+  }
+
+  const respondent = normalizeRespondentPayload(payload.respondent)
+
+  if (hasRespondentDetails(respondent)) {
+    return {
+      ...payload,
+      respondent,
+    }
   }
 
   return {
     ...payload,
     respondent: {
       fullName: "Anonymous Respondent",
-      role: "Other",
       consentGiven: payload.voluntaryConsent,
     },
   }
