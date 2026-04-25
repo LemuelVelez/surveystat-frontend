@@ -11,6 +11,7 @@ import {
   Loader2,
   RefreshCcw,
   Table2,
+  X,
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
@@ -48,6 +49,23 @@ type StatisticsPreviewRow = {
   standardDeviation: number
   interpretation: string
   meanRange: string
+}
+
+type CalculationStep = {
+  label: string
+  formula: string
+  substitution: string
+  result: string
+}
+
+type LikertDistribution = Record<LikertValue, number>
+
+type SectionSolution = {
+  answerCount: number
+  weightedTotal: number
+  distribution: LikertDistribution
+  hasFrequencyDistribution: boolean
+  steps: CalculationStep[]
 }
 
 type PlotlyChartProps = {
@@ -175,6 +193,157 @@ function createFallbackCalculation(summary: StatisticsSummary) {
   ]
 }
 
+function createEmptyLikertDistribution(): LikertDistribution {
+  return {
+    1: 0,
+    2: 0,
+    3: 0,
+    4: 0,
+    5: 0,
+  }
+}
+
+function toNumber(value: unknown, fallback = 0) {
+  const numberValue = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(numberValue) ? numberValue : fallback
+}
+
+function getRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null
+}
+
+function getLikertDistribution(value: unknown): LikertDistribution {
+  const distribution = createEmptyLikertDistribution()
+  const record = getRecord(value)
+  const source = getRecord(record?.distribution)
+
+  if (!source) {
+    return distribution
+  }
+
+  ;([1, 2, 3, 4, 5] as LikertValue[]).forEach((rating) => {
+    distribution[rating] = toNumber(source[rating] ?? source[String(rating)])
+  })
+
+  return distribution
+}
+
+function hasDistributionAnswers(distribution: LikertDistribution) {
+  return ([1, 2, 3, 4, 5] as LikertValue[]).some((rating) => distribution[rating] > 0)
+}
+
+function combineItemDistributions(items: SurveyItemStatistics[]): LikertDistribution {
+  return items.reduce((combined, item) => {
+    const distribution = getLikertDistribution(item)
+
+    ;([1, 2, 3, 4, 5] as LikertValue[]).forEach((rating) => {
+      combined[rating] += distribution[rating]
+    })
+
+    return combined
+  }, createEmptyLikertDistribution())
+}
+
+function getCalculationSteps(value: unknown): CalculationStep[] {
+  const record = getRecord(value)
+  const calculation = getRecord(record?.calculation)
+  const steps = Array.isArray(calculation?.steps) ? calculation.steps : []
+
+  return steps
+    .map((step) => {
+      const stepRecord = getRecord(step)
+
+      if (!stepRecord) {
+        return null
+      }
+
+      return {
+        label: String(stepRecord.label ?? "Step"),
+        formula: String(stepRecord.formula ?? ""),
+        substitution: String(stepRecord.substitution ?? ""),
+        result: String(stepRecord.result ?? ""),
+      }
+    })
+    .filter((step): step is CalculationStep => Boolean(step))
+}
+
+function getSectionItemStatistics(section: SurveySectionStatistics, items: SurveyItemStatistics[]) {
+  const sectionRecord = getRecord(section)
+  const sectionId = String(sectionRecord?.sectionId ?? "").trim()
+  const sectionTitle = section.sectionTitle.trim()
+
+  return items.filter((item) => {
+    const itemRecord = getRecord(item)
+    const itemSectionId = String(itemRecord?.sectionId ?? "").trim()
+
+    if (sectionId && itemSectionId) {
+      return itemSectionId === sectionId
+    }
+
+    return item.sectionTitle.trim() === sectionTitle
+  })
+}
+
+function createSectionCalculation(section: SurveySectionStatistics, items: SurveyItemStatistics[]): SectionSolution {
+  const sectionDistribution = getLikertDistribution(section)
+  const itemDistribution = combineItemDistributions(items)
+  const distribution = hasDistributionAnswers(sectionDistribution) ? sectionDistribution : itemDistribution
+  const hasFrequencyDistribution = hasDistributionAnswers(distribution)
+  const answerCount = section.count || ([1, 2, 3, 4, 5] as LikertValue[]).reduce(
+    (total, rating) => total + distribution[rating],
+    0,
+  )
+  const weightedTotal = hasFrequencyDistribution
+    ? ([1, 2, 3, 4, 5] as LikertValue[]).reduce((total, rating) => total + rating * distribution[rating], 0)
+    : section.weightedMean * answerCount
+  const calculatedWeightedMean = answerCount > 0 ? weightedTotal / answerCount : 0
+  const fallbackSteps: CalculationStep[] = [
+    {
+      label: "Frequency count",
+      formula: "f = count of submitted answers per Likert rating",
+      substitution: hasFrequencyDistribution
+        ? `1=${distribution[1]}, 2=${distribution[2]}, 3=${distribution[3]}, 4=${distribution[4]}, 5=${distribution[5]}`
+        : `N=${answerCount} section answers`,
+      result: `${answerCount} total section answers`,
+    },
+    {
+      label: "Weighted total",
+      formula: "Σ(xf)",
+      substitution: hasFrequencyDistribution
+        ? `1(${distribution[1]}) + 2(${distribution[2]}) + 3(${distribution[3]}) + 4(${distribution[4]}) + 5(${distribution[5]})`
+        : `${formatNumber(section.weightedMean)} × ${answerCount}`,
+      result: formatNumber(weightedTotal),
+    },
+    {
+      label: "Weighted mean",
+      formula: "Σ(xf) / N",
+      substitution: `${formatNumber(weightedTotal)} / ${answerCount || 1}`,
+      result: formatNumber(hasFrequencyDistribution ? calculatedWeightedMean : section.weightedMean),
+    },
+    {
+      label: "Standard deviation",
+      formula: "√variance",
+      substitution: `SD=${formatNumber(section.standardDeviation)}`,
+      result: formatNumber(section.standardDeviation),
+    },
+    {
+      label: "Interpretation",
+      formula: "Weighted mean matched to the Likert mean range",
+      substitution: `${formatNumber(section.weightedMean)} belongs to ${section.meanRange}`,
+      result: section.interpretation,
+    },
+  ]
+  const sectionSteps = getCalculationSteps(section)
+
+  return {
+    answerCount,
+    weightedTotal,
+    distribution,
+    hasFrequencyDistribution,
+    steps: sectionSteps.length > 0 ? sectionSteps : fallbackSteps,
+  }
+}
+
 function installPlotlyGlobalShim() {
   if (typeof globalThis === "undefined") return
 
@@ -275,6 +444,7 @@ export function Statistic() {
   const [isComputing, setIsComputing] = useState(false)
   const [hasComputed, setHasComputed] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [selectedSection, setSelectedSection] = useState<SurveySectionStatistics | null>(null)
   const [errorMessage, setErrorMessage] = useState("")
 
   const distributionData = useMemo(() => toDistributionData(summary.distribution), [summary.distribution])
@@ -295,6 +465,14 @@ export function Statistic() {
     [sectionStatistics],
   )
   const calculationSteps = summary.calculation?.steps ?? createFallbackCalculation(summary)
+  const selectedSectionItems = useMemo(
+    () => (selectedSection ? getSectionItemStatistics(selectedSection, itemStatistics) : []),
+    [itemStatistics, selectedSection],
+  )
+  const selectedSectionSolution = useMemo(
+    () => (selectedSection ? createSectionCalculation(selectedSection, selectedSectionItems) : null),
+    [selectedSection, selectedSectionItems],
+  )
 
   const statisticsPreviewColumns = useMemo<PreviewColumn<StatisticsPreviewRow>[]>(
     () => [
@@ -423,6 +601,7 @@ export function Statistic() {
     setErrorMessage("")
 
     try {
+      setSelectedSection(null)
       const nextFilters = getFormFilterValue(formCode)
       const [summaryData, formData, sectionData, itemData, responseData] = await Promise.all([
         surveyStatService.getStatisticsSummary(nextFilters),
@@ -459,6 +638,7 @@ export function Statistic() {
     setSurveyResponses([])
     setSectionStatistics([])
     setItemStatistics([])
+    setSelectedSection(null)
   }
 
   useEffect(() => {
@@ -611,7 +791,7 @@ export function Statistic() {
               sectionNarratives={sectionResultNarratives}
             />
 
-            <SectionMeanSummary sections={sectionStatistics} />
+            <SectionMeanSummary sections={sectionStatistics} onSectionClick={setSelectedSection} />
 
             <section className="grid gap-6 xl:grid-cols-2">
               <ChartCard title="Rating Distribution">
@@ -757,6 +937,13 @@ export function Statistic() {
           </div>
         </div>
       </Preview>
+
+      <SectionSolutionDialog
+        section={selectedSection}
+        items={selectedSectionItems}
+        solution={selectedSectionSolution}
+        onClose={() => setSelectedSection(null)}
+      />
     </main>
   )
 }
@@ -791,7 +978,12 @@ function ResultNarrativeCard({ overallNarrative, sectionNarratives }: ResultNarr
   )
 }
 
-function SectionMeanSummary({ sections }: { sections: SurveySectionStatistics[] }) {
+type SectionMeanSummaryProps = {
+  sections: SurveySectionStatistics[]
+  onSectionClick: (section: SurveySectionStatistics) => void
+}
+
+function SectionMeanSummary({ sections, onSectionClick }: SectionMeanSummaryProps) {
   return (
     <section className="rounded-3xl bg-white p-6 shadow-sm">
       <div className="mb-4 flex items-center gap-3">
@@ -808,7 +1000,13 @@ function SectionMeanSummary({ sections }: { sections: SurveySectionStatistics[] 
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {sections.map((section) => (
-            <div key={section.sectionId} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <button
+              key={section.sectionId}
+              type="button"
+              aria-label={`View detailed solution for ${section.sectionTitle}`}
+              onClick={() => onSectionClick(section)}
+              className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-cyan-300 hover:bg-cyan-50 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+            >
               <p className="line-clamp-2 text-sm font-black text-slate-950">{section.sectionTitle}</p>
               <p className="mt-3 text-3xl font-black tracking-tight text-cyan-700">
                 {formatNumber(section.weightedMean)}
@@ -817,11 +1015,144 @@ function SectionMeanSummary({ sections }: { sections: SurveySectionStatistics[] 
               <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-400">
                 {section.count} answers · {section.meanRange}
               </p>
-            </div>
+            </button>
           ))}
         </div>
       )}
     </section>
+  )
+}
+
+type SectionSolutionDialogProps = {
+  section: SurveySectionStatistics | null
+  items: SurveyItemStatistics[]
+  solution: SectionSolution | null
+  onClose: () => void
+}
+
+function SectionSolutionDialog({ section, items, solution, onClose }: SectionSolutionDialogProps) {
+  useEffect(() => {
+    if (!section) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [section, onClose])
+
+  if (!section || !solution) {
+    return null
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Close section solution dialog"
+        className="absolute inset-0 bg-slate-950/70"
+        onClick={onClose}
+      />
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="section-solution-title"
+        className="relative z-10 max-h-screen w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-6">
+          <div>
+            <p className="text-sm font-black uppercase tracking-wide text-cyan-700">Section Detailed Solution</p>
+            <h2 id="section-solution-title" className="mt-1 text-2xl font-black tracking-tight text-slate-950">
+              {section.sectionTitle}
+            </h2>
+          </div>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 transition hover:bg-slate-200 hover:text-slate-950"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="max-h-screen overflow-y-auto p-6">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <SummaryCard label="Answers" value={solution.answerCount} />
+            <SummaryCard label="Weighted Mean" value={formatNumber(section.weightedMean)} />
+            <SummaryCard label="Std. Dev." value={formatNumber(section.standardDeviation)} />
+            <SummaryCard label="Interpretation" value={section.interpretation} />
+          </div>
+
+          {solution.hasFrequencyDistribution ? (
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-black uppercase tracking-wide text-slate-500">Rating Frequency</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-5">
+                {([1, 2, 3, 4, 5] as LikertValue[]).map((rating) => (
+                  <div key={rating} className="rounded-xl bg-white p-3 text-center">
+                    <p className="text-xs font-black uppercase tracking-wide text-slate-400">Rating {rating}</p>
+                    <p className="mt-1 text-2xl font-black text-slate-950">{solution.distribution[rating]}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-5 grid gap-3">
+            {solution.steps.map((step, index) => (
+              <div key={`${step.label}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-black uppercase tracking-wide text-cyan-700">
+                  Step {index + 1}: {step.label}
+                </p>
+                <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                  <SolutionBlock label="Formula" value={step.formula} />
+                  <SolutionBlock label="Substitution" value={step.substitution} />
+                  <SolutionBlock label="Result" value={step.result} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {items.length > 0 ? (
+            <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
+              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-sm font-black uppercase tracking-wide text-slate-500">Section Items</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+                  <thead className="bg-white text-xs font-black uppercase tracking-wide text-slate-400">
+                    <tr>
+                      <th className="px-4 py-3">Code</th>
+                      <th className="px-4 py-3">Checklist Item</th>
+                      <th className="px-4 py-3">Answers</th>
+                      <th className="px-4 py-3">Weighted Mean</th>
+                      <th className="px-4 py-3">Interpretation</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
+                    {items.map((item) => (
+                      <tr key={`${item.sectionTitle}-${item.itemCode}`}>
+                        <td className="whitespace-nowrap px-4 py-3 font-black text-slate-950">{item.itemCode}</td>
+                        <td className="min-w-80 px-4 py-3 font-semibold leading-6">{item.itemStatement}</td>
+                        <td className="whitespace-nowrap px-4 py-3 font-semibold">{item.count}</td>
+                        <td className="whitespace-nowrap px-4 py-3 font-semibold">{formatNumber(item.weightedMean)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 font-semibold">{item.interpretation}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </section>
+    </div>
   )
 }
 
