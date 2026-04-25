@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { AgGridReact } from "ag-grid-react"
-import { AllCommunityModule, ModuleRegistry, type ColDef, type RowClickedEvent } from "ag-grid-community"
+import { AllCommunityModule, ModuleRegistry, type ColDef, type RowClickedEvent, type SelectionChangedEvent } from "ag-grid-community"
 import {
   ArrowLeft,
   ClipboardList,
@@ -98,6 +98,9 @@ function getRespondentKey(response: SurveyResponseSummary) {
   return response.respondentId?.trim() || `anonymous-${response.id}`
 }
 
+const DEFAULT_SIGNATURE_S3_BUCKET = "surveystat"
+const DEFAULT_SIGNATURE_S3_REGION = "ap-southeast-1"
+
 function getRawSignatureValues(response: SurveyResponseSummary) {
   return [
     response.respondentSignatureImage,
@@ -153,43 +156,126 @@ function normalizeDataSignatureImage(value: string) {
   return "data:image/png;base64," + base64Value
 }
 
-function normalizeSignatureUrl(value: string) {
-  const decodedValue = decodeSignatureEntities(value)
-
-  if (/^(blob:|https?:\/\/)/i.test(decodedValue)) {
-    return encodeURI(decodedValue)
-  }
-
-  if (decodedValue.startsWith("//")) {
-    const protocol = typeof window !== "undefined" ? window.location.protocol : "https:"
-    return protocol + encodeURI(decodedValue)
-  }
-
-  if (decodedValue.startsWith("/")) {
-    return SURVEYSTAT_API_URL + encodeURI(decodedValue)
-  }
-
-  if (/^(uploads|upload|files|file|storage|signatures|signature)\//i.test(decodedValue)) {
-    return SURVEYSTAT_API_URL + "/" + encodeURI(decodedValue)
-  }
-
-  return ""
-}
-
-function normalizeSignatureImageSource(value: string) {
-  return normalizeDataSignatureImage(value) || normalizeSignatureUrl(value)
-}
-
 function uniqueSignatureValues(values: string[]) {
   return values.filter((value, index, list) => value && list.indexOf(value) === index)
 }
 
+function encodeSignatureUrl(value: string) {
+  return encodeURI(value).replace(/%25([0-9A-F]{2})/gi, "%$1")
+}
+
+function getUrlPathWithSearch(url: URL) {
+  return `${url.pathname}${url.search}${url.hash}`
+}
+
+function buildS3ObjectUrl(bucketName: string, region: string, key: string, endpointStyle: "dash" | "dot" = "dash") {
+  const cleanKey = key.replace(/^\/+/, "")
+  const host = endpointStyle === "dash" ? `${bucketName}.s3-${region}.amazonaws.com` : `${bucketName}.s3.${region}.amazonaws.com`
+
+  return encodeSignatureUrl(`https://${host}/${cleanKey}`)
+}
+
+function getS3UrlCandidates(rawUrl: string) {
+  try {
+    const url = new URL(rawUrl)
+    const pathWithSearch = getUrlPathWithSearch(url)
+    const virtualHostedMatch = url.hostname.match(/^([^.]+)\.s3[.-]([a-z0-9-]+)\.amazonaws\.com$/i)
+    const globalHostedMatch = url.hostname.match(/^([^.]+)\.s3\.amazonaws\.com$/i)
+    const pathStyleMatch = url.hostname.match(/^s3[.-]([a-z0-9-]+)\.amazonaws\.com$/i)
+    const candidates: string[] = []
+
+    if (virtualHostedMatch) {
+      const [, bucketName, region] = virtualHostedMatch
+      candidates.push(`${url.protocol}//${bucketName}.s3-${region}.amazonaws.com${pathWithSearch}`)
+      candidates.push(`${url.protocol}//${bucketName}.s3.${region}.amazonaws.com${pathWithSearch}`)
+    }
+
+    if (globalHostedMatch) {
+      const [, bucketName] = globalHostedMatch
+      candidates.push(`${url.protocol}//${bucketName}.s3-${DEFAULT_SIGNATURE_S3_REGION}.amazonaws.com${pathWithSearch}`)
+      candidates.push(`${url.protocol}//${bucketName}.s3.${DEFAULT_SIGNATURE_S3_REGION}.amazonaws.com${pathWithSearch}`)
+    }
+
+    if (pathStyleMatch) {
+      const [, region] = pathStyleMatch
+      const pathParts = url.pathname.split("/").filter(Boolean)
+      const [bucketName, ...keyParts] = pathParts
+
+      if (bucketName && keyParts.length > 0) {
+        const key = keyParts.join("/")
+        candidates.push(buildS3ObjectUrl(bucketName, region, key, "dash"))
+        candidates.push(buildS3ObjectUrl(bucketName, region, key, "dot"))
+      }
+    }
+
+    candidates.push(rawUrl)
+
+    return uniqueSignatureValues(candidates.map(encodeSignatureUrl))
+  } catch {
+    return []
+  }
+}
+
+function getRelativeS3SignatureCandidates(value: string) {
+  const key = value.replace(/^\/+/, "")
+
+  if (!/^(uploads|upload|files|file|storage|signatures|signature)\//i.test(key)) {
+    return []
+  }
+
+  return [
+    buildS3ObjectUrl(DEFAULT_SIGNATURE_S3_BUCKET, DEFAULT_SIGNATURE_S3_REGION, key, "dash"),
+    buildS3ObjectUrl(DEFAULT_SIGNATURE_S3_BUCKET, DEFAULT_SIGNATURE_S3_REGION, key, "dot"),
+  ]
+}
+
+function normalizeSignatureUrls(value: string) {
+  const decodedValue = decodeSignatureEntities(value)
+  const candidates: string[] = []
+
+  if (/^blob:/i.test(decodedValue)) {
+    return [decodedValue]
+  }
+
+  if (/^https?:\/\//i.test(decodedValue)) {
+    return getS3UrlCandidates(decodedValue)
+  }
+
+  if (decodedValue.startsWith("//")) {
+    const protocol = typeof window !== "undefined" ? window.location.protocol : "https:"
+    return getS3UrlCandidates(protocol + decodedValue)
+  }
+
+  if (decodedValue.startsWith("/")) {
+    const relativePath = decodedValue.replace(/^\/+/, "")
+    candidates.push(...getRelativeS3SignatureCandidates(relativePath))
+    candidates.push(SURVEYSTAT_API_URL + encodeSignatureUrl(decodedValue))
+  }
+
+  if (/^(uploads|upload|files|file|storage|signatures|signature)\//i.test(decodedValue)) {
+    candidates.push(...getRelativeS3SignatureCandidates(decodedValue))
+    candidates.push(SURVEYSTAT_API_URL + "/" + encodeSignatureUrl(decodedValue))
+  }
+
+  return uniqueSignatureValues(candidates)
+}
+
+function normalizeSignatureImageSources(value: string) {
+  const dataImage = normalizeDataSignatureImage(value)
+
+  if (dataImage) {
+    return [dataImage]
+  }
+
+  return normalizeSignatureUrls(value)
+}
+
 function getResponseSignatureImageSources(response: SurveyResponseSummary) {
-  return uniqueSignatureValues(getRawSignatureValues(response).map(normalizeSignatureImageSource))
+  return uniqueSignatureValues(getRawSignatureValues(response).flatMap(normalizeSignatureImageSources))
 }
 
 function getResponseSignatureFallbackValue(response: SurveyResponseSummary) {
-  return getRawSignatureValues(response).find((value) => !normalizeSignatureImageSource(value)) ?? ""
+  return getRawSignatureValues(response).find((value) => normalizeSignatureImageSources(value).length === 0) ?? ""
 }
 
 function getSignatureExportValue(response: SurveyResponseSummary) {
@@ -252,6 +338,7 @@ export function Respondents() {
   const [responses, setResponses] = useState<SurveyResponseSummary[]>([])
   const [answers, setAnswers] = useState<SurveyResponseAnswer[]>([])
   const [selectedResponseId, setSelectedResponseId] = useState("")
+  const [selectedResponseIds, setSelectedResponseIds] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isAnswersLoading, setIsAnswersLoading] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
@@ -269,6 +356,11 @@ export function Respondents() {
     () => responses.find((response) => response.id === selectedResponseId) ?? null,
     [responses, selectedResponseId],
   )
+  const selectedResponses = useMemo(() => {
+    const selectedIds = new Set(selectedResponseIds)
+
+    return responses.filter((response) => selectedIds.has(response.id))
+  }, [responses, selectedResponseIds])
   const selectedShareUrl = useMemo(
     () => getSurveyShareUrl(selectedFormCode ? [selectedFormCode] : forms.map((form) => form.code)),
     [forms, selectedFormCode],
@@ -280,6 +372,16 @@ export function Respondents() {
     responses.length > 0
       ? responses.reduce((total, response) => total + (response.weightedMean ?? 0), 0) / responses.length
       : 0
+  const responsesForPreview = selectedResponses.length > 0 ? selectedResponses : responses
+  const responsesPreviewCount = responsesForPreview.length
+  const responsesPreviewAnswerCount = responsesForPreview.reduce((total, response) => total + (response.answerCount ?? 0), 0)
+  const responsesPreviewRespondentCount = new Set(responsesForPreview.map(getRespondentKey)).size
+  const responsesPreviewAverageWeightedMean =
+    responsesForPreview.length > 0
+      ? responsesForPreview.reduce((total, response) => total + (response.weightedMean ?? 0), 0) / responsesForPreview.length
+      : 0
+  const responsesPreviewSelectionLabel =
+    selectedResponses.length > 0 ? `Selected responses (${selectedResponses.length})` : "All visible responses"
   const selectedResponseIndex = selectedResponse
     ? Math.max(
         0,
@@ -292,6 +394,18 @@ export function Respondents() {
 
   const responseColumnDefs = useMemo<ColDef<SurveyResponseSummary>[]>(
     () => [
+      {
+        headerName: "",
+        width: 56,
+        minWidth: 56,
+        maxWidth: 56,
+        pinned: "left",
+        sortable: false,
+        filter: false,
+        resizable: false,
+        checkboxSelection: true,
+        headerCheckboxSelection: true,
+      },
       { field: "formTitle", headerName: "Survey", minWidth: 260, flex: 1 },
       {
         field: "respondentFullName",
@@ -362,12 +476,20 @@ export function Respondents() {
   const responsesPreviewSummary = useMemo<PreviewSummaryItem[]>(
     () => [
       { label: "Filter", value: selectedForm?.title ?? "All survey responses" },
-      { label: "Responses", value: responseCount },
-      { label: "Respondents", value: respondentCount },
-      { label: "Answers", value: answerCount },
-      { label: "Average Weighted Mean", value: formatNumber(averageWeightedMean) },
+      { label: "Selection", value: responsesPreviewSelectionLabel },
+      { label: "Responses", value: responsesPreviewCount },
+      { label: "Respondents", value: responsesPreviewRespondentCount },
+      { label: "Answers", value: responsesPreviewAnswerCount },
+      { label: "Average Weighted Mean", value: formatNumber(responsesPreviewAverageWeightedMean) },
     ],
-    [answerCount, averageWeightedMean, respondentCount, responseCount, selectedForm],
+    [
+      responsesPreviewAnswerCount,
+      responsesPreviewAverageWeightedMean,
+      responsesPreviewCount,
+      responsesPreviewRespondentCount,
+      responsesPreviewSelectionLabel,
+      selectedForm,
+    ],
   )
 
   const responsePreviewColumns = useMemo<PreviewColumn<SurveyResponseAnswer>[]>(
@@ -417,6 +539,7 @@ export function Respondents() {
       setForms(surveyForms)
       setResponses(surveyResponses)
       setSelectedResponseId((current) => (surveyResponses.some((response) => response.id === current) ? current : ""))
+      setSelectedResponseIds((current) => current.filter((responseId) => surveyResponses.some((response) => response.id === responseId)))
       setAnswers([])
     } catch (error) {
       const message = getErrorMessage(error)
@@ -498,6 +621,7 @@ export function Respondents() {
       toast.success("Survey response deleted successfully.")
       setPendingDeleteResponse(null)
       setSelectedResponseId("")
+      setSelectedResponseIds((current) => current.filter((responseId) => responseId !== pendingDeleteResponse.id))
       setAnswers([])
       await loadRespondentsPage(selectedFormCode)
     } catch (error) {
@@ -516,6 +640,10 @@ export function Respondents() {
     if (event.data?.id) {
       loadResponseAnswers(event.data.id)
     }
+  }
+
+  function handleResponsesSelectionChanged(event: SelectionChangedEvent<SurveyResponseSummary>) {
+    setSelectedResponseIds(event.api.getSelectedRows().map((response) => response.id))
   }
 
   useEffect(() => {
@@ -632,7 +760,7 @@ export function Respondents() {
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   <FileDown className="size-4" />
-                  Preview Export
+                  {selectedResponses.length > 0 ? `Preview Selected (${selectedResponses.length})` : "Preview Export"}
                 </button>
               }
             >
@@ -644,7 +772,10 @@ export function Respondents() {
                   pagination
                   paginationPageSize={10}
                   animateRows
-                  rowSelection="single"
+                  rowSelection="multiple"
+                  suppressRowClickSelection
+                  getRowId={(params) => params.data?.id ?? ""}
+                  onSelectionChanged={handleResponsesSelectionChanged}
                   onRowClicked={handleRowClicked}
                 />
               </div>
@@ -736,11 +867,33 @@ export function Respondents() {
 
       <Preview
         isOpen={isResponsesPreviewOpen}
-        title={selectedForm ? `Responses Preview Export · ${selectedForm.title}` : "Responses Preview Export"}
-        subtitle={selectedFormCode ? `Filtered by ${selectedFormCode}` : "All submitted survey responses"}
-        fileName={selectedFormCode ? `${selectedFormCode}-survey-responses` : "all-survey-responses"}
+        title={
+          selectedResponses.length > 0
+            ? `Selected Responses Preview Export · ${selectedResponses.length} selected`
+            : selectedForm
+              ? `Responses Preview Export · ${selectedForm.title}`
+              : "Responses Preview Export"
+        }
+        subtitle={
+          selectedResponses.length > 0
+            ? selectedFormCode
+              ? `Selected responses filtered by ${selectedFormCode}`
+              : "Selected submitted survey responses"
+            : selectedFormCode
+              ? `Filtered by ${selectedFormCode}`
+              : "All submitted survey responses"
+        }
+        fileName={
+          selectedResponses.length > 0
+            ? selectedFormCode
+              ? `${selectedFormCode}-selected-survey-responses`
+              : "selected-survey-responses"
+            : selectedFormCode
+              ? `${selectedFormCode}-survey-responses`
+              : "all-survey-responses"
+        }
         summary={responsesPreviewSummary}
-        rows={responses}
+        rows={responsesForPreview}
         columns={responsesPreviewColumns}
         isLoading={isLoading}
         onClose={() => setIsResponsesPreviewOpen(false)}
