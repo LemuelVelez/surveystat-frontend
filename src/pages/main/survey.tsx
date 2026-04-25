@@ -42,6 +42,8 @@ const respondentRoles = ["Student", "Faculty", "QA Personnel", "Administrator", 
 
 type SignatureMode = "draw" | "scan"
 
+const drawnSignatureFilename = "drawn-respondent-signature.png"
+
 type SurveyDraft = {
   answers: Record<string, LikertValue>
   respondent: CreateRespondentPayload
@@ -691,10 +693,10 @@ export function Survey() {
                       <button
                         type="button"
                         onClick={() => setIsChecklistDialogOpen(true)}
-                        className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800"
+                        className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-600"
                       >
                         <ClipboardList className="size-4" />
-                        Answer Checklist Items
+                        Click Me to Answer
                       </button>
                       <div className="mt-3 grid max-w-xs gap-2">
                         {scale.map((option) => (
@@ -835,24 +837,59 @@ function SignatureCapture({
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const context = canvas.getContext("2d")
-    if (!context) return
+    let animationFrameId = 0
 
-    const pixelRatio = window.devicePixelRatio || 1
-    const rect = canvas.getBoundingClientRect()
-    const width = Math.max(rect.width, 320)
-    const height = 190
+    function initializeCanvas() {
+      const canvasElement = canvasRef.current
+      if (!canvasElement) return
 
-    canvas.width = width * pixelRatio
-    canvas.height = height * pixelRatio
-    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
-    context.fillStyle = "#ffffff"
-    context.fillRect(0, 0, width, height)
-    context.lineWidth = 3
-    context.lineCap = "round"
-    context.lineJoin = "round"
-    context.strokeStyle = "#0f172a"
-  }, [mode])
+      const context = canvasElement.getContext("2d")
+      if (!context) return
+
+      const pixelRatio = window.devicePixelRatio || 1
+      const rect = canvasElement.getBoundingClientRect()
+      const width = Math.max(Math.floor(rect.width), 1)
+      const height = Math.max(Math.floor(rect.height), 1)
+      const shouldRestoreDrawnSignature = Boolean(imageSignature && imageFilename === drawnSignatureFilename)
+
+      canvasElement.width = Math.round(width * pixelRatio)
+      canvasElement.height = Math.round(height * pixelRatio)
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+      context.fillStyle = "#ffffff"
+      context.fillRect(0, 0, width, height)
+      context.lineWidth = 3
+      context.lineCap = "round"
+      context.lineJoin = "round"
+      context.strokeStyle = "#0f172a"
+
+      if (!shouldRestoreDrawnSignature) return
+
+      const signatureImage = new Image()
+      signatureImage.onload = () => {
+        context.drawImage(signatureImage, 0, 0, width, height)
+        context.lineWidth = 3
+        context.lineCap = "round"
+        context.lineJoin = "round"
+        context.strokeStyle = "#0f172a"
+      }
+      signatureImage.src = imageSignature
+    }
+
+    function scheduleInitializeCanvas() {
+      window.cancelAnimationFrame(animationFrameId)
+      animationFrameId = window.requestAnimationFrame(initializeCanvas)
+    }
+
+    scheduleInitializeCanvas()
+
+    const resizeObserver = new ResizeObserver(scheduleInitializeCanvas)
+    resizeObserver.observe(canvas)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId)
+      resizeObserver.disconnect()
+    }
+  }, [imageFilename, imageSignature, mode])
 
   function getCanvasPoint(event: PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current
@@ -870,6 +907,8 @@ function SignatureCapture({
   }
 
   function handleDrawStart(event: PointerEvent<HTMLCanvasElement>) {
+    event.preventDefault()
+
     const canvas = canvasRef.current
     const context = canvas?.getContext("2d")
 
@@ -885,6 +924,8 @@ function SignatureCapture({
   function handleDrawMove(event: PointerEvent<HTMLCanvasElement>) {
     if (!isDrawingRef.current) return
 
+    event.preventDefault()
+
     const context = canvasRef.current?.getContext("2d")
     if (!context) return
 
@@ -896,15 +937,16 @@ function SignatureCapture({
   function handleDrawEnd(event: PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current
 
-    if (!canvas) return
+    if (!canvas || !isDrawingRef.current) return
 
+    event.preventDefault()
     isDrawingRef.current = false
 
     if (canvas.hasPointerCapture(event.pointerId)) {
       canvas.releasePointerCapture(event.pointerId)
     }
 
-    onImageSignatureChange(canvas.toDataURL("image/png"), "drawn-respondent-signature.png")
+    onImageSignatureChange(canvas.toDataURL("image/png"), drawnSignatureFilename)
   }
 
   function clearDrawnSignature() {
@@ -916,6 +958,7 @@ function SignatureCapture({
     const rect = canvas.getBoundingClientRect()
     context.fillStyle = "#ffffff"
     context.fillRect(0, 0, rect.width, rect.height)
+    context.beginPath()
     onImageSignatureChange("", "")
   }
 
@@ -974,11 +1017,12 @@ function SignatureCapture({
           <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-2 sm:p-3">
             <canvas
               ref={canvasRef}
-              className="h-40 w-full touch-none rounded-xl bg-white shadow-inner sm:h-48"
+              className="h-40 w-full max-w-full touch-none select-none rounded-xl bg-white shadow-inner sm:h-48"
               onPointerDown={handleDrawStart}
               onPointerMove={handleDrawMove}
               onPointerUp={handleDrawEnd}
               onPointerCancel={handleDrawEnd}
+              onPointerLeave={handleDrawEnd}
               aria-label="Draw respondent signature"
             />
           </div>
@@ -1036,10 +1080,10 @@ function SignatureCapture({
 
       {imageSignature ? (
         <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
-          <p className="max-w-xs truncate text-xs font-black uppercase tracking-wide text-cyan-700 sm:max-w-none">
+          <p className="max-w-full truncate text-xs font-black uppercase tracking-wide text-cyan-700">
             Signature image ready {imageFilename ? `· ${imageFilename}` : ""}
           </p>
-          <img src={imageSignature} alt="Respondent signature preview" className="mt-3 max-h-40 max-w-xs rounded-xl border border-cyan-200 bg-white p-3 sm:max-w-none" />
+          <img src={imageSignature} alt="Respondent signature preview" className="mt-3 h-auto max-h-40 w-full max-w-full rounded-xl border border-cyan-200 bg-white object-contain p-3" />
         </div>
       ) : null}
     </div>
@@ -1144,9 +1188,13 @@ type MobileChecklistDialogProps = {
 
 function MobileChecklistDialog({ sections, scale, answers, updateAnswer, onClose }: MobileChecklistDialogProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-slate-950/70 px-3 pt-8 backdrop-blur-sm sm:hidden" role="dialog" aria-modal="true">
-      <section className="flex max-h-screen w-full max-w-xs flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl shadow-slate-950/30">
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-3 py-4 backdrop-blur-sm sm:hidden"
+      role="dialog"
+      aria-modal="true"
+    >
+      <section className="flex max-h-[calc(100svh-2rem)] w-full max-w-sm flex-col overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-950/30">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-4">
           <div className="min-w-0">
             <p className="max-w-xs truncate text-xs font-black uppercase tracking-wide text-cyan-700">Checklist Evaluation</p>
             <h3 className="mt-1 max-w-xs truncate text-lg font-black text-slate-950">Answer Items</h3>

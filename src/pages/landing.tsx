@@ -11,6 +11,7 @@ import {
   Link2,
   Loader2,
   ListChecks,
+  Menu,
   Plus,
   ShieldCheck,
   UsersRound,
@@ -164,6 +165,7 @@ export function Landing() {
   const [respondentInformationRequired, setRespondentInformationRequired] = useState(true)
   const [isCreatingSurvey, setIsCreatingSurvey] = useState(false)
   const [updatingRespondentInfoFormId, setUpdatingRespondentInfoFormId] = useState<string | null>(null)
+  const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false)
 
   async function loadLandingData() {
     setIsLoading(true)
@@ -235,6 +237,10 @@ export function Landing() {
   function openExistingSurveysDialog() {
     setSelectedSurveyCodes((current) => (current.length > 0 ? current : forms[0]?.code ? [forms[0].code] : []))
     setIsExistingSurveysDialogOpen(true)
+  }
+
+  function closeMobileNavigation() {
+    setIsMobileNavigationOpen(false)
   }
 
   function toggleExistingSurvey(formCode: string) {
@@ -351,15 +357,26 @@ export function Landing() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
-      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-3 py-4 sm:px-6 sm:py-8 lg:px-8">
-        <nav className="sticky top-4 z-40 flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/80 px-3 py-3 shadow-2xl shadow-slate-950/30 backdrop-blur sm:rounded-3xl sm:px-5 sm:py-4">
-          <Link to="/" className="flex min-w-0 items-center gap-3 font-semibold tracking-tight">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white p-2 shadow-lg shadow-cyan-400/20 sm:size-12">
+    <main className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-white">
+      <section className="mx-auto flex min-h-screen w-full min-w-0 max-w-7xl flex-col px-2 py-3 sm:px-6 sm:py-8 lg:px-8">
+        <nav className="sticky top-3 z-40 flex min-w-0 items-center justify-between gap-2 rounded-2xl border border-white/10 bg-slate-950/80 px-2 py-2 shadow-2xl shadow-slate-950/30 backdrop-blur sm:top-4 sm:rounded-3xl sm:px-5 sm:py-4">
+          <Link to="/" className="flex min-w-0 items-center gap-2 font-semibold tracking-tight sm:gap-3" onClick={closeMobileNavigation}>
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-2xl bg-white p-2 shadow-lg shadow-cyan-400/20 sm:size-12">
               <img src={logoUrl} alt="SurveyStat logo" className="size-full object-contain" />
             </span>
-            <span className="max-w-xs truncate text-xl sm:max-w-none">SurveyStat</span>
+            <span className="min-w-0 max-w-full truncate text-base sm:max-w-none sm:text-xl">SurveyStat</span>
           </Link>
+
+          <button
+            type="button"
+            onClick={() => setIsMobileNavigationOpen((current) => !current)}
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white transition hover:bg-white/10 sm:size-11 md:hidden"
+            aria-controls="landing-mobile-navigation"
+            aria-expanded={isMobileNavigationOpen}
+            aria-label="Toggle navigation menu"
+          >
+            {isMobileNavigationOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+          </button>
 
           <div className="hidden items-center gap-3 md:flex">
             <button
@@ -405,57 +422,85 @@ export function Landing() {
           </div>
         </nav>
 
-        <div className="mx-auto mt-4 flex w-full max-w-xs flex-col gap-3 md:hidden">
-          <button
-            type="button"
-            onClick={openExistingSurveysDialog}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white"
-          >
-            <ListChecks className="size-4" />
-            Existing Surveys
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsCreateSurveyDialogOpen(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-bold text-slate-950"
-          >
-            <Plus className="size-4" />
-            Create New Survey
-          </button>
-          <Link
-            to="/respondents"
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white"
-          >
-            <UsersRound className="size-4" />
-            Respondents
-          </Link>
-        </div>
+        {isMobileNavigationOpen ? (
+          <div id="landing-mobile-navigation" className="mx-auto mt-3 flex w-full max-w-full min-w-0 flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 sm:mt-4 sm:gap-3 sm:p-3 md:hidden">
+            <button
+              type="button"
+              onClick={() => {
+                closeMobileNavigation()
+                openExistingSurveysDialog()
+              }}
+              className="inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-xs font-bold text-white sm:px-4 sm:text-sm"
+            >
+              <ListChecks className="size-4" />
+              Existing Surveys
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                closeMobileNavigation()
+                setIsCreateSurveyDialogOpen(true)
+              }}
+              className="inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-3 py-3 text-xs font-bold text-slate-950 sm:px-4 sm:text-sm"
+            >
+              <Plus className="size-4" />
+              Create New Survey
+            </button>
+            <Link
+              to="/respondents"
+              onClick={closeMobileNavigation}
+              className="inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-xs font-bold text-white sm:px-4 sm:text-sm"
+            >
+              <UsersRound className="size-4" />
+              Respondents
+            </Link>
+            <Link
+              to="/statistic"
+              onClick={closeMobileNavigation}
+              className="inline-flex min-w-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-xs font-bold text-white sm:px-4 sm:text-sm"
+            >
+              Statistics
+            </Link>
+            {ACREDIFY_SYSTEM_URL ? (
+              <a
+                href={ACREDIFY_SYSTEM_URL}
+                target="_blank"
+                rel="noreferrer"
+                onClick={closeMobileNavigation}
+                className="inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-3 py-3 text-xs font-bold text-slate-950 sm:px-4 sm:text-sm"
+              >
+                Open System
+                <ArrowUpRight className="size-4" />
+              </a>
+            ) : null}
+          </div>
+        ) : null}
 
-        <div className="grid flex-1 items-center gap-8 py-10 sm:gap-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="space-y-8">
-            <div className="inline-flex max-w-xs items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm font-medium text-cyan-100 wrap-anywhere sm:max-w-none">
+        <div className="grid min-w-0 flex-1 items-center gap-6 py-8 sm:gap-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="min-w-0 space-y-6 sm:space-y-8">
+            <div className="inline-flex w-full max-w-full items-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-medium text-cyan-100 wrap-anywhere sm:w-auto sm:max-w-none sm:rounded-full sm:px-4 sm:text-sm">
               <ShieldCheck className="size-4 shrink-0" />
               Digital repository survey and statistical dashboard
             </div>
 
             <div className="space-y-6">
-              <h1 className="max-w-xs text-3xl font-black tracking-tight text-white wrap-anywhere sm:max-w-4xl sm:text-5xl md:text-7xl">
+              <h1 className="max-w-full text-2xl font-black tracking-tight text-white wrap-anywhere sm:max-w-4xl sm:text-5xl md:text-7xl">
                 Collect accreditation survey responses and evaluate results faster.
               </h1>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
                 <p className="text-sm text-slate-400">Active Surveys</p>
-                <p className="mt-2 max-w-xs truncate text-3xl font-black sm:max-w-none">{isLoading ? "—" : getSurveyItemTotal(forms)}</p>
+                <p className="mt-2 max-w-full truncate text-2xl font-black sm:max-w-none sm:text-3xl">{isLoading ? "—" : getSurveyItemTotal(forms)}</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
                 <p className="text-sm text-slate-400">Responses</p>
-                <p className="mt-2 max-w-xs truncate text-3xl font-black sm:max-w-none">{formatNumber(summary?.responseCount)}</p>
+                <p className="mt-2 max-w-full truncate text-2xl font-black sm:max-w-none sm:text-3xl">{formatNumber(summary?.responseCount)}</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
                 <p className="text-sm text-slate-400">Weighted Mean</p>
-                <p className="mt-2 max-w-xs truncate text-3xl font-black sm:max-w-none">{formatNumber(summary?.weightedMean, 2)}</p>
+                <p className="mt-2 max-w-full truncate text-2xl font-black sm:max-w-none sm:text-3xl">{formatNumber(summary?.weightedMean, 2)}</p>
               </div>
             </div>
 
@@ -469,7 +514,7 @@ export function Landing() {
               <button
                 type="button"
                 onClick={openExistingSurveysDialog}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-bold text-slate-950 shadow-xl shadow-cyan-400/20 transition hover:bg-cyan-300"
+                className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-3 py-3 text-xs font-bold text-slate-950 shadow-xl shadow-cyan-400/20 transition hover:bg-cyan-300 sm:w-auto sm:px-6 sm:text-sm"
               >
                 <ListChecks className="size-4" />
                 Existing Surveys
@@ -477,14 +522,14 @@ export function Landing() {
               <button
                 type="button"
                 onClick={() => setIsCreateSurveyDialogOpen(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-3 py-3 text-xs font-bold text-white transition hover:bg-white/10 sm:w-auto sm:px-6 sm:text-sm"
               >
                 <FilePlus2 className="size-4" />
                 Create New Survey
               </button>
               <Link
                 to="/respondents"
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-3 py-3 text-xs font-bold text-white transition hover:bg-white/10 sm:w-auto sm:px-6 sm:text-sm"
               >
                 <UsersRound className="size-4" />
                 Respondents
@@ -492,14 +537,14 @@ export function Landing() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-3 shadow-2xl shadow-cyan-950/50 backdrop-blur sm:rounded-3xl sm:p-4">
-            <div className="rounded-2xl bg-slate-900 p-4 sm:p-5">
-              <div className="mb-6 flex items-start justify-between gap-3 sm:gap-4">
+          <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl shadow-cyan-950/50 backdrop-blur sm:rounded-3xl sm:p-4">
+            <div className="min-w-0 rounded-2xl bg-slate-900 p-3 sm:p-5">
+              <div className="mb-5 flex min-w-0 flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="min-w-0">
                   <p className="text-sm text-slate-400">Survey Summary</p>
-                  <h2 className="mt-1 line-clamp-2 max-w-xs text-xl font-bold wrap-anywhere sm:max-w-none sm:text-2xl">{highlightedSurvey?.title ?? "Active Survey Forms"}</h2>
+                  <h2 className="mt-1 line-clamp-2 max-w-full text-lg font-bold wrap-anywhere sm:max-w-none sm:text-2xl">{highlightedSurvey?.title ?? "Active Survey Forms"}</h2>
                 </div>
-                <div className="shrink-0 rounded-full bg-emerald-400/10 px-3 py-1 text-sm font-semibold text-emerald-300">
+                <div className="w-fit shrink-0 rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-300 sm:text-sm">
                   Live Data
                 </div>
               </div>
@@ -511,17 +556,17 @@ export function Landing() {
               ) : (
                 <>
                   <div className="grid gap-4 sm:grid-cols-3">
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
                       <p className="text-sm text-slate-400">Answers</p>
-                      <p className="mt-2 text-2xl font-black">{formatNumber(summary?.answerCount)}</p>
+                      <p className="mt-2 max-w-full truncate text-2xl font-black">{formatNumber(summary?.answerCount)}</p>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
                       <p className="text-sm text-slate-400">Items</p>
-                      <p className="mt-2 text-2xl font-black">{formatNumber(summary?.itemCount)}</p>
+                      <p className="mt-2 max-w-full truncate text-2xl font-black">{formatNumber(summary?.itemCount)}</p>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
                       <p className="text-sm text-slate-400">Interpretation</p>
-                      <p className="mt-2 max-w-xs truncate text-2xl font-black sm:max-w-none">{summary?.interpretation ?? "—"}</p>
+                      <p className="mt-2 max-w-full truncate text-2xl font-black sm:max-w-none">{summary?.interpretation ?? "—"}</p>
                     </div>
                   </div>
 
@@ -536,15 +581,15 @@ export function Landing() {
                         }}
                         className="block w-full rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-300/50 hover:bg-cyan-300/10"
                       >
-                        <div className="flex items-start justify-between gap-3 sm:gap-4">
+                        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                           <div className="min-w-0">
                             <p className="text-xs font-black uppercase tracking-wide text-cyan-200">
                               Survey {form.surveyStepNumber || index + 1}
                             </p>
-                            <h3 className="mt-1 line-clamp-2 max-w-xs font-bold wrap-anywhere sm:max-w-none">{form.title}</h3>
-                            <p className="mt-1 line-clamp-2 max-w-xs text-sm leading-6 text-slate-400 wrap-anywhere sm:max-w-none">{form.description}</p>
+                            <h3 className="mt-1 line-clamp-2 max-w-full font-bold wrap-anywhere sm:max-w-none">{form.title}</h3>
+                            <p className="mt-1 line-clamp-2 max-w-full text-sm leading-6 text-slate-400 wrap-anywhere sm:max-w-none">{form.description}</p>
                           </div>
-                          <span className="shrink-0 rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-200">
+                          <span className="w-fit shrink-0 rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-200">
                             {form.respondentInformationRequired ? "Info required" : "Info off"}
                           </span>
                         </div>
@@ -556,12 +601,12 @@ export function Landing() {
 
               <div className="mt-6 space-y-3">
                 {features.map((feature) => (
-                  <div key={feature.title} className="flex gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div key={feature.title} className="flex min-w-0 gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">
                       <feature.icon className="size-5" />
                     </span>
                     <div className="flex min-h-10 min-w-0 items-center">
-                      <h3 className="max-w-xs truncate font-bold sm:max-w-none">{feature.title}</h3>
+                      <h3 className="max-w-full truncate font-bold sm:max-w-none">{feature.title}</h3>
                     </div>
                   </div>
                 ))}
@@ -827,3 +872,5 @@ export function Landing() {
 }
 
 export default Landing
+
+
