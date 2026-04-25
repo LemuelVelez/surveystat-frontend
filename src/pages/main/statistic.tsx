@@ -27,6 +27,7 @@ import {
   type SurveyForm,
   type SurveyFormStatistics,
   type SurveyItemStatistics,
+  type SurveyResponseSummary,
   type SurveySectionStatistics,
 } from "@/api/surveystat"
 import Preview, { type PreviewColumn, type PreviewSummaryItem } from "@/components/preview"
@@ -113,6 +114,31 @@ function formatNumber(value: number, digits = 2) {
     maximumFractionDigits: digits,
     minimumFractionDigits: digits,
   })
+}
+
+function getRespondentKey(response: SurveyResponseSummary) {
+  return response.respondentId?.trim() || `anonymous-${response.id}`
+}
+
+function getOverallResultNarrative(
+  summary: StatisticsSummary,
+  selectedFormTitle: string,
+  responseCount: number,
+  respondentCount: number,
+) {
+  if (summary.answerCount === 0) {
+    return "No submitted answers are available yet for this survey, so the overall result cannot be interpreted."
+  }
+
+  return `${selectedFormTitle} received ${responseCount} total response${responseCount === 1 ? "" : "s"} from ${respondentCount} respondent${respondentCount === 1 ? "" : "s"}. The overall weighted mean is ${formatNumber(summary.weightedMean)}, which falls within ${summary.meanRange} and is interpreted as ${summary.interpretation}.`
+}
+
+function getSectionResultNarrative(section: SurveySectionStatistics) {
+  if (section.count === 0) {
+    return `${section.sectionTitle} has no submitted answers yet, so its section mean cannot be interpreted.`
+  }
+
+  return `${section.sectionTitle} has a section mean of ${formatNumber(section.weightedMean)} based on ${section.count} answer${section.count === 1 ? "" : "s"}, interpreted as ${section.interpretation} (${section.meanRange}).`
 }
 
 function createFallbackCalculation(summary: StatisticsSummary) {
@@ -242,6 +268,7 @@ export function Statistic() {
   const [selectedFormCode, setSelectedFormCode] = useState("")
   const [summary, setSummary] = useState<StatisticsSummary>(defaultSummary)
   const [formStatistics, setFormStatistics] = useState<SurveyFormStatistics[]>([])
+  const [surveyResponses, setSurveyResponses] = useState<SurveyResponseSummary[]>([])
   const [sectionStatistics, setSectionStatistics] = useState<SurveySectionStatistics[]>([])
   const [itemStatistics, setItemStatistics] = useState<SurveyItemStatistics[]>([])
   const [isFormsLoading, setIsFormsLoading] = useState(true)
@@ -254,6 +281,19 @@ export function Statistic() {
   const formChartLabels = useMemo(() => formStatistics.map((item) => item.formTitle), [formStatistics])
   const formChartMeans = useMemo(() => formStatistics.map((item) => item.weightedMean), [formStatistics])
   const selectedFormTitle = useMemo(() => getSelectedFormTitle(forms, selectedFormCode), [forms, selectedFormCode])
+  const totalResponseCount = Math.max(summary.responseCount, surveyResponses.length)
+  const respondentCount = new Set(surveyResponses.map(getRespondentKey)).size
+  const totalRespondentCount = respondentCount || totalResponseCount
+  const overallResultNarrative = getOverallResultNarrative(
+    summary,
+    selectedFormTitle,
+    totalResponseCount,
+    totalRespondentCount,
+  )
+  const sectionResultNarratives = useMemo(
+    () => sectionStatistics.map((section) => getSectionResultNarrative(section)),
+    [sectionStatistics],
+  )
   const calculationSteps = summary.calculation?.steps ?? createFallbackCalculation(summary)
 
   const statisticsPreviewColumns = useMemo<PreviewColumn<StatisticsPreviewRow>[]>(
@@ -273,7 +313,8 @@ export function Statistic() {
   const statisticsPreviewSummary = useMemo<PreviewSummaryItem[]>(
     () => [
       { label: "Survey", value: selectedFormTitle },
-      { label: "Responses", value: summary.responseCount },
+      { label: "Responses", value: totalResponseCount },
+      { label: "Respondents", value: totalRespondentCount },
       { label: "Answer Count", value: summary.answerCount },
       { label: "Weighted Mean", value: formatNumber(summary.weightedMean) },
       { label: "Standard Deviation", value: formatNumber(summary.standardDeviation) },
@@ -281,7 +322,7 @@ export function Statistic() {
       { label: "Interpretation", value: summary.interpretation },
       { label: "Mean Range", value: summary.meanRange },
     ],
-    [selectedFormTitle, summary],
+    [selectedFormTitle, summary, totalRespondentCount, totalResponseCount],
   )
 
   const calculationPreviewRows = useMemo<StatisticsPreviewRow[]>(
@@ -300,20 +341,32 @@ export function Statistic() {
   )
 
   const statisticsPreviewRows = useMemo<StatisticsPreviewRow[]>(
-    () =>
-      itemStatistics.length > 0
-        ? itemStatistics.map((item) => ({
-            sectionTitle: item.sectionTitle,
-            itemCode: item.itemCode,
-            itemStatement: item.itemStatement,
-            count: item.count,
-            weightedMean: item.weightedMean,
-            standardDeviation: item.standardDeviation,
-            interpretation: item.interpretation,
-            meanRange: item.meanRange,
-          }))
-        : calculationPreviewRows,
-    [calculationPreviewRows, itemStatistics],
+    () => {
+      const sectionRows = sectionStatistics.map((section) => ({
+        sectionTitle: section.sectionTitle,
+        itemCode: "Section Mean",
+        itemStatement: getSectionResultNarrative(section),
+        count: section.count,
+        weightedMean: section.weightedMean,
+        standardDeviation: section.standardDeviation,
+        interpretation: section.interpretation,
+        meanRange: section.meanRange,
+      }))
+
+      const itemRows = itemStatistics.map((item) => ({
+        sectionTitle: item.sectionTitle,
+        itemCode: item.itemCode,
+        itemStatement: item.itemStatement,
+        count: item.count,
+        weightedMean: item.weightedMean,
+        standardDeviation: item.standardDeviation,
+        interpretation: item.interpretation,
+        meanRange: item.meanRange,
+      }))
+
+      return sectionRows.length > 0 || itemRows.length > 0 ? [...sectionRows, ...itemRows] : calculationPreviewRows
+    },
+    [calculationPreviewRows, itemStatistics, sectionStatistics],
   )
 
   const sectionColumnDefs = useMemo<ColDef<SurveySectionStatistics>[]>(
@@ -371,17 +424,23 @@ export function Statistic() {
 
     try {
       const nextFilters = getFormFilterValue(formCode)
-      const [summaryData, formData, sectionData, itemData] = await Promise.all([
+      const [summaryData, formData, sectionData, itemData, responseData] = await Promise.all([
         surveyStatService.getStatisticsSummary(nextFilters),
         surveyStatService.getFormStatistics(nextFilters),
         surveyStatService.getSectionStatistics(nextFilters),
         surveyStatService.getItemStatistics(nextFilters),
+        surveyStatService.listSurveyResponses({
+          formCode,
+          submittedOnly: true,
+          limit: 1000,
+        }),
       ])
 
       setSummary(summaryData)
       setFormStatistics(formData)
       setSectionStatistics(sectionData)
       setItemStatistics(itemData)
+      setSurveyResponses(responseData)
       setHasComputed(true)
     } catch (error) {
       const message = getErrorMessage(error)
@@ -397,6 +456,7 @@ export function Statistic() {
     setHasComputed(false)
     setSummary(defaultSummary)
     setFormStatistics([])
+    setSurveyResponses([])
     setSectionStatistics([])
     setItemStatistics([])
   }
@@ -538,12 +598,20 @@ export function Statistic() {
           <div className="space-y-6">
             <MethodReferenceCard />
 
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <SummaryCard label="Responses" value={summary.responseCount} />
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <SummaryCard label="Responses" value={totalResponseCount} />
+              <SummaryCard label="Respondents" value={totalRespondentCount} />
               <SummaryCard label="Answer Count" value={summary.answerCount} />
               <SummaryCard label="Weighted Mean" value={summary.weightedMean.toFixed(2)} />
               <SummaryCard label="Interpretation" value={summary.interpretation} />
             </section>
+
+            <ResultNarrativeCard
+              overallNarrative={overallResultNarrative}
+              sectionNarratives={sectionResultNarratives}
+            />
+
+            <SectionMeanSummary sections={sectionStatistics} />
 
             <section className="grid gap-6 xl:grid-cols-2">
               <ChartCard title="Rating Distribution">
@@ -655,6 +723,20 @@ export function Statistic() {
         isLoading={isComputing}
         onClose={() => setIsPreviewOpen(false)}
       >
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <p className="text-sm font-black uppercase tracking-wide text-slate-500">Result Narrative</p>
+          <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">{overallResultNarrative}</p>
+          {sectionResultNarratives.length > 0 ? (
+            <div className="mt-3 grid gap-2">
+              {sectionResultNarratives.map((narrative) => (
+                <p key={narrative} className="rounded-xl bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-600">
+                  {narrative}
+                </p>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
         <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
           <p className="text-sm font-black uppercase tracking-wide text-cyan-700">Detailed Solution</p>
           <div className="mt-3 grid gap-3">
@@ -676,6 +758,70 @@ export function Statistic() {
         </div>
       </Preview>
     </main>
+  )
+}
+
+type ResultNarrativeCardProps = {
+  overallNarrative: string
+  sectionNarratives: string[]
+}
+
+function ResultNarrativeCard({ overallNarrative, sectionNarratives }: ResultNarrativeCardProps) {
+  return (
+    <section className="rounded-3xl bg-white p-6 shadow-sm">
+      <div className="flex items-start gap-4">
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
+          <BookOpenCheck className="size-6" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xl font-black">Result Narrative</h2>
+          <p className="mt-2 text-sm font-semibold leading-7 text-slate-700">{overallNarrative}</p>
+          {sectionNarratives.length > 0 ? (
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              {sectionNarratives.map((narrative) => (
+                <div key={narrative} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold leading-6 text-slate-600">{narrative}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function SectionMeanSummary({ sections }: { sections: SurveySectionStatistics[] }) {
+  return (
+    <section className="rounded-3xl bg-white p-6 shadow-sm">
+      <div className="mb-4 flex items-center gap-3">
+        <span className="flex size-10 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
+          <Calculator className="size-5" />
+        </span>
+        <h2 className="text-xl font-black">Mean of Every Section</h2>
+      </div>
+
+      {sections.length === 0 ? (
+        <div className="rounded-2xl bg-slate-50 p-5 text-sm font-semibold text-slate-500">
+          No section-level results are available for this survey yet.
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {sections.map((section) => (
+            <div key={section.sectionId} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="line-clamp-2 text-sm font-black text-slate-950">{section.sectionTitle}</p>
+              <p className="mt-3 text-3xl font-black tracking-tight text-cyan-700">
+                {formatNumber(section.weightedMean)}
+              </p>
+              <p className="mt-1 text-sm font-bold text-slate-600">{section.interpretation}</p>
+              <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+                {section.count} answers · {section.meanRange}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 

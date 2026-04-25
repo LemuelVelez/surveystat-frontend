@@ -245,10 +245,12 @@ export function Survey() {
   const scale = normalizeScale(currentQuestionnaire?.scale)
   const respondentInformationRequired = currentQuestionnaire?.respondentInformationRequired ?? true
   const respondentInformationComplete = hasRequiredRespondentInformation(currentDraft.respondent)
+  const respondentSignatureComplete = Boolean(currentDraft.respondentSignatureImage)
   const requiredChecklistComplete = requiredItems.every((item) => currentDraft.answers[item.id])
   const isCurrentSurveyComplete =
     requiredChecklistComplete &&
     currentDraft.voluntaryConsent &&
+    respondentSignatureComplete &&
     (!respondentInformationRequired || respondentInformationComplete)
   const completedCount = questionnaires.filter((questionnaire) => drafts[questionnaire.code]?.isSubmitted).length
 
@@ -396,6 +398,11 @@ export function Survey() {
 
     if (!currentDraft.voluntaryConsent) {
       toast.error("Please confirm voluntary consent before submitting.")
+      return
+    }
+
+    if (!currentDraft.respondentSignatureImage) {
+      toast.error("Please provide the required respondent signature.")
       return
     }
 
@@ -753,6 +760,7 @@ export function Survey() {
                   <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                     <SignatureCapture
                       label={currentQuestionnaire.signatureLabel || "Respondent Signature"}
+                      required
                       mode={currentDraft.signatureMode}
                       imageSignature={currentDraft.respondentSignatureImage}
                       imageFilename={currentDraft.respondentSignatureFileName}
@@ -811,6 +819,7 @@ export function Survey() {
 
 type SignatureCaptureProps = {
   label: string
+  required: boolean
   mode: SignatureMode
   imageSignature: string
   imageFilename: string
@@ -820,6 +829,7 @@ type SignatureCaptureProps = {
 
 function SignatureCapture({
   label,
+  required,
   mode,
   imageSignature,
   imageFilename,
@@ -990,9 +1000,13 @@ function SignatureCapture({
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <span className="block max-w-xs truncate text-sm font-black text-slate-700 sm:max-w-none">{label}</span>
+          <span className="block max-w-xs truncate text-sm font-black text-slate-700 sm:max-w-none">
+            {label} {required ? <span className="text-red-500">*</span> : null}
+          </span>
           <p className="mt-1 max-w-xs text-sm leading-6 text-slate-500 wrap-anywhere sm:max-w-none">
-            Optional: draw your signature or scan/capture a signature image using your camera.
+            {required
+              ? "Required: draw your signature or scan/capture a signature image using your camera."
+              : "Optional: draw your signature or scan/capture a signature image using your camera."}
           </p>
         </div>
 
@@ -1076,6 +1090,12 @@ function SignatureCapture({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {required && !imageSignature ? (
+        <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-600">
+          Respondent signature is required before submitting.
+        </p>
       ) : null}
 
       {imageSignature ? (

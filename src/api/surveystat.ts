@@ -438,6 +438,59 @@ export const surveystatApi = {
     request<T>(path, { ...options, method: "DELETE" }),
 }
 
+function hasTextValue(value?: string | null) {
+  return typeof value === "string" && value.trim().length > 0
+}
+
+function hasRespondentDetails(respondent?: CreateRespondentPayload | null) {
+  if (!respondent) return false
+
+  return (
+    hasTextValue(respondent.fullName) ||
+    hasTextValue(respondent.email) ||
+    hasTextValue(respondent.role) ||
+    hasTextValue(respondent.office) ||
+    hasTextValue(respondent.program)
+  )
+}
+
+function withAnonymousRespondent(payload: SubmitSurveyResponsePayload): SubmitSurveyResponsePayload {
+  if (payload.respondentId || hasRespondentDetails(payload.respondent)) {
+    return payload
+  }
+
+  return {
+    ...payload,
+    respondent: {
+      fullName: "Anonymous Respondent",
+      role: "Anonymous",
+      consentGiven: payload.voluntaryConsent,
+    },
+  }
+}
+
+function normalizeSurveyResponseSummary(response: SurveyResponseSummary, index: number): SurveyResponseSummary {
+  const anonymousLabel = `Anonymous Respondent ${index + 1}`
+  const respondentFullName = hasTextValue(response.respondentFullName)
+    ? response.respondentFullName!.trim()
+    : anonymousLabel
+  const respondentId = hasTextValue(response.respondentId)
+    ? response.respondentId!.trim()
+    : `anonymous-${response.id || index + 1}`
+
+  return {
+    ...response,
+    respondentId,
+    respondentFullName,
+    respondentRole: hasTextValue(response.respondentRole) ? String(response.respondentRole).trim() : "Anonymous",
+  }
+}
+
+function normalizeSurveyResponseSummaryList(responses: SurveyResponseSummary[]) {
+  return responses.map(normalizeSurveyResponseSummary)
+}
+
+
 export const surveyStatService = {
   listSurveyForms: (activeOnly = true) =>
     surveystatApi.get<SurveyForm[]>(`/surveys/forms${buildQueryString({ activeOnly })}`),
@@ -460,10 +513,12 @@ export const surveyStatService = {
     surveystatApi.get<SurveyQuestionnaireForm>(`/surveys/questionnaires/${encodeURIComponent(formId)}`),
 
   submitSurveyResponse: (payload: SubmitSurveyResponsePayload) =>
-    surveystatApi.post<SurveyResponse>("/surveys/responses", payload),
+    surveystatApi.post<SurveyResponse>("/surveys/responses", withAnonymousRespondent(payload)),
 
   listSurveyResponses: (filters: SurveyResponseFilters = {}) =>
-    surveystatApi.get<SurveyResponseSummary[]>(`/surveys/responses${buildQueryString(filters)}`),
+    surveystatApi
+      .get<SurveyResponseSummary[]>(`/surveys/responses${buildQueryString(filters)}`)
+      .then(normalizeSurveyResponseSummaryList),
 
   getResponseAnswers: (responseId: string) =>
     surveystatApi.get<SurveyResponseAnswer[]>(

@@ -8,6 +8,8 @@ export type PreviewColumn<T extends object> = {
   key: keyof T | string
   header: string
   getValue?: (row: T, index: number) => string | number | null | undefined
+  getImageValue?: (row: T, index: number) => string | null | undefined
+  renderValue?: (row: T, index: number) => ReactNode
 }
 
 export type PreviewSummaryItem = {
@@ -43,6 +45,29 @@ function getCellValue<T extends object>(row: T, column: PreviewColumn<T>, index:
 
   const value = (row as Record<string, unknown>)[String(column.key)]
   return value === undefined || value === null ? "" : String(value)
+}
+
+function getRenderedCellValue<T extends object>(row: T, column: PreviewColumn<T>, index: number) {
+  return column.renderValue?.(row, index) ?? getCellValue(row, column, index)
+}
+
+function getImageExportValue<T extends object>(row: T, column: PreviewColumn<T>, index: number) {
+  return column.getImageValue?.(row, index) ?? ""
+}
+
+function isDataImageValue(value: string) {
+  return /^data:image\/(png|jpe?g|webp);base64,/i.test(value.trim())
+}
+
+function getImageFormat(value: string) {
+  const match = value.match(/^data:image\/(png|jpe?g|webp);base64,/i)
+  const format = match?.[1]?.toLowerCase()
+
+  if (format === "jpg") return "JPEG"
+  if (format === "jpeg") return "JPEG"
+  if (format === "webp") return "WEBP"
+
+  return "PNG"
 }
 
 function getExportRows<T extends object>(rows: T[], columns: PreviewColumn<T>[]) {
@@ -197,6 +222,38 @@ export function Preview<T extends object>({
         textColor: [30, 41, 59],
         overflow: "linebreak",
       },
+      didParseCell: (cellData) => {
+        if (cellData.section !== "body") return
+
+        const column = columns[cellData.column.index]
+        const row = rows[cellData.row.index]
+
+        if (row && column && isDataImageValue(getImageExportValue(row, column, cellData.row.index))) {
+          cellData.cell.styles.minCellHeight = 50
+          cellData.cell.text = [""]
+        }
+      },
+      didDrawCell: (cellData) => {
+        if (cellData.section !== "body") return
+
+        const column = columns[cellData.column.index]
+        const row = rows[cellData.row.index]
+        const imageValue = row && column ? getImageExportValue(row, column, cellData.row.index) : ""
+
+        if (!isDataImageValue(imageValue)) return
+
+        const maxWidth = Math.max(24, Math.min(110, cellData.cell.width - 10))
+        const maxHeight = Math.max(18, Math.min(38, cellData.cell.height - 10))
+
+        document.addImage(
+          imageValue,
+          getImageFormat(imageValue),
+          cellData.cell.x + 5,
+          cellData.cell.y + 5,
+          maxWidth,
+          maxHeight,
+        )
+      },
       headStyles: {
         fillColor: [15, 23, 42],
         textColor: [255, 255, 255],
@@ -288,7 +345,7 @@ export function Preview<T extends object>({
                         <div key={String(column.key)} className="border-b border-slate-100 py-2 last:border-b-0">
                           <p className="max-w-xs truncate text-xs font-black uppercase tracking-wide text-slate-500">{column.header}</p>
                           <p className="mt-1 max-w-xs text-sm font-semibold text-slate-800 wrap-anywhere">
-                            {getCellValue(row, column, rowIndex)}
+                            {getRenderedCellValue(row, column, rowIndex)}
                           </p>
                         </div>
                       ))}
@@ -312,7 +369,7 @@ export function Preview<T extends object>({
                       <tr key={rowIndex} className="border-t border-slate-200 odd:bg-white even:bg-slate-50">
                         {columns.map((column) => (
                           <td key={String(column.key)} className="px-4 py-3 align-top text-slate-700">
-                            {getCellValue(row, column, rowIndex)}
+                            {getRenderedCellValue(row, column, rowIndex)}
                           </td>
                         ))}
                       </tr>

@@ -79,6 +79,70 @@ async function copyText(value: string, successMessage: string) {
   toast.success(successMessage)
 }
 
+function getAnonymousRespondentName(index: number) {
+  return `Anonymous Respondent ${index + 1}`
+}
+
+function getRespondentDisplayName(response: SurveyResponseSummary, index: number) {
+  const respondentName = response.respondentFullName?.trim()
+
+  if (respondentName && respondentName.toLowerCase() !== "anonymous respondent") {
+    return respondentName
+  }
+
+  return getAnonymousRespondentName(index)
+}
+
+function getRespondentKey(response: SurveyResponseSummary) {
+  return response.respondentId?.trim() || `anonymous-${response.id}`
+}
+
+function getResponseSignatureValue(response: SurveyResponseSummary) {
+  return response.respondentSignatureImage?.trim() || response.respondentSignature?.trim() || ""
+}
+
+function isDataSignatureImage(value: string) {
+  return /^data:image\//i.test(value.trim())
+}
+
+function isImageSignatureValue(value: string) {
+  return isDataSignatureImage(value) || /^https?:\/\//i.test(value.trim())
+}
+
+function getSignatureExportValue(response: SurveyResponseSummary) {
+  const signature = getResponseSignatureValue(response)
+
+  if (!signature) {
+    return "—"
+  }
+
+  if (isDataSignatureImage(signature)) {
+    return "Signature image attached"
+  }
+
+  return signature
+}
+
+function renderSignatureValue(response: SurveyResponseSummary) {
+  const signature = getResponseSignatureValue(response)
+
+  if (!signature) {
+    return <span className="text-sm font-semibold text-slate-400">—</span>
+  }
+
+  if (isImageSignatureValue(signature)) {
+    return (
+      <img
+        src={signature}
+        alt="Respondent signature"
+        className="max-h-16 rounded-lg border border-slate-200 bg-white p-2"
+      />
+    )
+  }
+
+  return <span className="text-sm font-bold text-slate-700">{signature}</span>
+}
+
 export function Respondents() {
   const [forms, setForms] = useState<SurveyForm[]>([])
   const [selectedFormCode, setSelectedFormCode] = useState("")
@@ -108,18 +172,39 @@ export function Respondents() {
   )
   const responseCount = responses.length
   const answerCount = responses.reduce((total, response) => total + (response.answerCount ?? 0), 0)
-  const respondentCount = new Set(responses.map((response) => response.respondentId).filter(Boolean)).size
+  const respondentCount = new Set(responses.map(getRespondentKey)).size
   const averageWeightedMean =
     responses.length > 0
       ? responses.reduce((total, response) => total + (response.weightedMean ?? 0), 0) / responses.length
       : 0
+  const selectedResponseIndex = selectedResponse
+    ? Math.max(
+        0,
+        responses.findIndex((response) => response.id === selectedResponse.id),
+      )
+    : 0
+  const selectedRespondentName = selectedResponse ? getRespondentDisplayName(selectedResponse, selectedResponseIndex) : ""
+  const selectedSignatureValue = selectedResponse ? getResponseSignatureValue(selectedResponse) : ""
 
   const responseColumnDefs = useMemo<ColDef<SurveyResponseSummary>[]>(
     () => [
       { field: "formTitle", headerName: "Survey", minWidth: 260, flex: 1 },
-      { field: "respondentFullName", headerName: "Respondent", minWidth: 220, flex: 1 },
+      {
+        field: "respondentFullName",
+        headerName: "Respondent",
+        minWidth: 220,
+        flex: 1,
+        valueGetter: (params) => (params.data ? getRespondentDisplayName(params.data, params.node?.rowIndex ?? 0) : "Anonymous"),
+      },
       { field: "respondentEmail", headerName: "Email", minWidth: 220, flex: 1 },
       { field: "respondentRole", headerName: "Role", width: 160 },
+      {
+        field: "respondentSignature",
+        headerName: "Signature",
+        minWidth: 180,
+        flex: 1,
+        valueGetter: (params) => (params.data ? getSignatureExportValue(params.data) : "—"),
+      },
       { field: "answerCount", headerName: "Answers", width: 120 },
       { field: "weightedMean", headerName: "Weighted Mean", width: 160 },
       { field: "interpretation", headerName: "Interpretation", minWidth: 170, flex: 1 },
@@ -149,11 +234,21 @@ export function Respondents() {
     () => [
       { key: "formTitle", header: "Survey" },
       { key: "formCode", header: "Code" },
-      { key: "respondentFullName", header: "Respondent", getValue: (row) => row.respondentFullName || "Anonymous" },
+      { key: "respondentFullName", header: "Respondent", getValue: (row, index) => getRespondentDisplayName(row, index) },
       { key: "respondentEmail", header: "Email", getValue: (row) => row.respondentEmail || "—" },
       { key: "respondentRole", header: "Role", getValue: (row) => row.respondentRole || "—" },
       { key: "respondentOffice", header: "Office", getValue: (row) => row.respondentOffice || "—" },
       { key: "respondentProgram", header: "Program", getValue: (row) => row.respondentProgram || "—" },
+      {
+        key: "respondentSignature",
+        header: "Signature",
+        getValue: (row) => getSignatureExportValue(row),
+        getImageValue: (row) => {
+          const signature = getResponseSignatureValue(row)
+          return isDataSignatureImage(signature) ? signature : ""
+        },
+        renderValue: (row) => renderSignatureValue(row),
+      },
       { key: "answerCount", header: "Answers" },
       { key: "weightedMean", header: "Weighted Mean", getValue: (row) => formatNumber(row.weightedMean) },
       { key: "interpretation", header: "Interpretation", getValue: (row) => row.interpretation || "No data" },
@@ -191,16 +286,17 @@ export function Respondents() {
       selectedResponse
         ? [
             { label: "Survey", value: selectedResponse.formTitle },
-            { label: "Respondent", value: selectedResponse.respondentFullName || "Anonymous" },
+            { label: "Respondent", value: selectedRespondentName },
             { label: "Email", value: selectedResponse.respondentEmail || "—" },
             { label: "Role", value: selectedResponse.respondentRole || "—" },
+            { label: "Signature", value: getSignatureExportValue(selectedResponse) },
             { label: "Answers", value: selectedResponse.answerCount },
             { label: "Weighted Mean", value: formatNumber(selectedResponse.weightedMean) },
             { label: "Interpretation", value: selectedResponse.interpretation || "No data" },
             { label: "Submitted", value: formatDate(selectedResponse.submittedAt) },
           ]
         : [],
-    [selectedResponse],
+    [selectedRespondentName, selectedResponse],
   )
 
   async function loadRespondentsPage(formCode = selectedFormCode) {
@@ -458,7 +554,7 @@ export function Respondents() {
                 <div className="mb-4 space-y-4">
                   <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                      <p className="text-sm font-black text-slate-950">{selectedResponse.respondentFullName || "Anonymous respondent"}</p>
+                      <p className="text-sm font-black text-slate-950">{selectedRespondentName}</p>
                       <p className="mt-1 text-sm text-slate-500">{selectedResponse.respondentEmail || "No respondent email"}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -491,23 +587,23 @@ export function Respondents() {
                   </div>
 
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    <SummaryCard label="Respondent" value={selectedResponse.respondentFullName || "Anonymous"} />
+                    <SummaryCard label="Respondent" value={selectedRespondentName} />
                     <SummaryCard label="Weighted Mean" value={formatNumber(selectedResponse.weightedMean)} />
                     <SummaryCard label="Interpretation" value={selectedResponse.interpretation || "No data"} />
                     <SummaryCard label="Submitted" value={formatDate(selectedResponse.submittedAt)} />
                   </div>
 
-                  {selectedResponse.respondentSignature ? (
+                  {selectedSignatureValue ? (
                     <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
                       <p className="text-xs font-black uppercase tracking-wide text-cyan-700">Respondent Signature</p>
-                      {/^https?:\/\//i.test(selectedResponse.respondentSignature) ? (
+                      {isImageSignatureValue(selectedSignatureValue) ? (
                         <img
-                          src={selectedResponse.respondentSignature}
+                          src={selectedSignatureValue}
                           alt="Respondent signature"
                           className="mt-3 max-h-32 rounded-xl border border-cyan-200 bg-white p-3"
                         />
                       ) : (
-                        <p className="mt-2 text-xl font-black text-slate-950">{selectedResponse.respondentSignature}</p>
+                        <p className="mt-2 text-xl font-black text-slate-950">{selectedSignatureValue}</p>
                       )}
                     </div>
                   ) : null}
@@ -554,8 +650,8 @@ export function Respondents() {
       <Preview
         isOpen={isPreviewOpen}
         title={selectedResponse ? `Response Preview · ${selectedResponse.formTitle}` : "Response Preview"}
-        subtitle={selectedResponse ? `${selectedResponse.respondentFullName || "Anonymous"} · ${formatDate(selectedResponse.submittedAt)}` : undefined}
-        fileName={selectedResponse ? `${selectedResponse.formCode}-${selectedResponse.respondentFullName || "response"}` : "survey-response"}
+        subtitle={selectedResponse ? `${selectedRespondentName} · ${formatDate(selectedResponse.submittedAt)}` : undefined}
+        fileName={selectedResponse ? `${selectedResponse.formCode}-${selectedRespondentName || "response"}` : "survey-response"}
         summary={responsePreviewSummary}
         rows={answers}
         columns={responsePreviewColumns}
@@ -576,7 +672,15 @@ export function Respondents() {
                   This will remove the selected response and its answers from SurveyStat.
                 </p>
                 <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm">
-                  <p className="font-black text-slate-950">{pendingDeleteResponse.respondentFullName || "Anonymous respondent"}</p>
+                  <p className="font-black text-slate-950">
+                    {getRespondentDisplayName(
+                      pendingDeleteResponse,
+                      Math.max(
+                        0,
+                        responses.findIndex((response) => response.id === pendingDeleteResponse.id),
+                      ),
+                    )}
+                  </p>
                   <p className="mt-1 text-slate-500">{pendingDeleteResponse.formTitle}</p>
                 </div>
               </div>
