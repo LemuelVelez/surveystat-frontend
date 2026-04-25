@@ -442,6 +442,18 @@ function hasTextValue(value?: string | null) {
   return typeof value === "string" && value.trim().length > 0
 }
 
+function getTextRecordValue(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key]
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim()
+    }
+  }
+
+  return ""
+}
+
 function hasRespondentDetails(respondent?: CreateRespondentPayload | null) {
   if (!respondent) return false
 
@@ -470,6 +482,7 @@ function withAnonymousRespondent(payload: SubmitSurveyResponsePayload): SubmitSu
 }
 
 function normalizeSurveyResponseSummary(response: SurveyResponseSummary, index: number): SurveyResponseSummary {
+  const record = response as SurveyResponseSummary & Record<string, unknown>
   const anonymousLabel = `Anonymous Respondent ${index + 1}`
   const respondentFullName = hasTextValue(response.respondentFullName)
     ? response.respondentFullName!.trim()
@@ -477,12 +490,44 @@ function normalizeSurveyResponseSummary(response: SurveyResponseSummary, index: 
   const respondentId = hasTextValue(response.respondentId)
     ? response.respondentId!.trim()
     : `anonymous-${response.id || index + 1}`
+  const respondentSignature = getTextRecordValue(record, [
+    "respondentSignature",
+    "respondent_signature",
+    "respondentSignatureUrl",
+    "respondent_signature_url",
+    "signature",
+    "signatureUrl",
+    "signature_url",
+  ])
+  const respondentSignatureImage = getTextRecordValue(record, [
+    "respondentSignatureImage",
+    "respondent_signature_image",
+    "respondentSignatureDataUrl",
+    "respondent_signature_data_url",
+    "signatureImage",
+    "signature_image",
+    "signatureDataUrl",
+    "signature_data_url",
+    "signatureBase64",
+    "signature_base64",
+  ])
+  const respondentSignatureFileName = getTextRecordValue(record, [
+    "respondentSignatureFileName",
+    "respondent_signature_file_name",
+    "signatureFileName",
+    "signature_file_name",
+    "fileName",
+    "file_name",
+  ])
 
   return {
     ...response,
     respondentId,
     respondentFullName,
     respondentRole: hasTextValue(response.respondentRole) ? String(response.respondentRole).trim() : "Anonymous",
+    respondentSignature: respondentSignature || response.respondentSignature || null,
+    respondentSignatureImage: respondentSignatureImage || response.respondentSignatureImage || null,
+    respondentSignatureFileName: respondentSignatureFileName || response.respondentSignatureFileName || null,
   }
 }
 

@@ -22,6 +22,7 @@ import "ag-grid-community/styles/ag-grid.css"
 import "ag-grid-community/styles/ag-theme-quartz.css"
 
 import {
+  SURVEYSTAT_API_URL,
   SurveyStatApiError,
   surveyStatService,
   type SurveyForm,
@@ -97,50 +98,152 @@ function getRespondentKey(response: SurveyResponseSummary) {
   return response.respondentId?.trim() || `anonymous-${response.id}`
 }
 
-function getResponseSignatureValue(response: SurveyResponseSummary) {
-  return response.respondentSignatureImage?.trim() || response.respondentSignature?.trim() || ""
+function getRawSignatureValues(response: SurveyResponseSummary) {
+  return [
+    response.respondentSignatureImage,
+    response.respondentSignature,
+    response.respondentSignatureFileName,
+  ]
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter(Boolean)
 }
 
-function isDataSignatureImage(value: string) {
-  return /^data:image\//i.test(value.trim())
+function decodeSignatureEntities(value: string) {
+  return value
+    .trim()
+    .replace(/^['"]+|['"]+$/g, "")
+    .replace(/\\\//g, "/")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#x2F;/gi, "/")
+    .replace(/&#47;/g, "/")
 }
 
-function isImageSignatureValue(value: string) {
-  return isDataSignatureImage(value) || /^https?:\/\//i.test(value.trim())
+function normalizeDataSignatureImage(value: string) {
+  const decodedValue = decodeSignatureEntities(value)
+  const compactValue = decodedValue.replace(/\s+/g, "")
+
+  if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(compactValue)) {
+    return compactValue
+  }
+
+  if (/^data:image\/[a-z0-9.+-]+,/i.test(decodedValue)) {
+    return decodedValue
+  }
+
+  const base64Value = compactValue.replace(/^base64,/i, "")
+  const hasImageMagicNumber = /^(iVBORw0KGgo|\/9j\/|UklGR|R0lGOD)/.test(base64Value)
+  const isBase64Like = base64Value.length > 80 && /^[A-Za-z0-9+/=]+$/.test(base64Value)
+
+  if (!hasImageMagicNumber || !isBase64Like) {
+    return ""
+  }
+
+  if (base64Value.startsWith("/9j/")) {
+    return "data:image/jpeg;base64," + base64Value
+  }
+
+  if (base64Value.startsWith("UklGR")) {
+    return "data:image/webp;base64," + base64Value
+  }
+
+  if (base64Value.startsWith("R0lGOD")) {
+    return "data:image/gif;base64," + base64Value
+  }
+
+  return "data:image/png;base64," + base64Value
+}
+
+function normalizeSignatureUrl(value: string) {
+  const decodedValue = decodeSignatureEntities(value)
+
+  if (/^(blob:|https?:\/\/)/i.test(decodedValue)) {
+    return encodeURI(decodedValue)
+  }
+
+  if (decodedValue.startsWith("//")) {
+    const protocol = typeof window !== "undefined" ? window.location.protocol : "https:"
+    return protocol + encodeURI(decodedValue)
+  }
+
+  if (decodedValue.startsWith("/")) {
+    return SURVEYSTAT_API_URL + encodeURI(decodedValue)
+  }
+
+  if (/^(uploads|upload|files|file|storage|signatures|signature)\//i.test(decodedValue)) {
+    return SURVEYSTAT_API_URL + "/" + encodeURI(decodedValue)
+  }
+
+  return ""
+}
+
+function normalizeSignatureImageSource(value: string) {
+  return normalizeDataSignatureImage(value) || normalizeSignatureUrl(value)
+}
+
+function uniqueSignatureValues(values: string[]) {
+  return values.filter((value, index, list) => value && list.indexOf(value) === index)
+}
+
+function getResponseSignatureImageSources(response: SurveyResponseSummary) {
+  return uniqueSignatureValues(getRawSignatureValues(response).map(normalizeSignatureImageSource))
+}
+
+function getResponseSignatureFallbackValue(response: SurveyResponseSummary) {
+  return getRawSignatureValues(response).find((value) => !normalizeSignatureImageSource(value)) ?? ""
 }
 
 function getSignatureExportValue(response: SurveyResponseSummary) {
-  const signature = getResponseSignatureValue(response)
+  const sources = getResponseSignatureImageSources(response)
+  const dataImage = sources.find((source) => /^data:image\//i.test(source))
 
-  if (!signature) {
-    return "—"
-  }
-
-  if (isDataSignatureImage(signature)) {
+  if (dataImage) {
     return "Signature image attached"
   }
 
-  return signature
+  return sources[0] || getResponseSignatureFallbackValue(response) || "—"
 }
 
-function renderSignatureValue(response: SurveyResponseSummary) {
-  const signature = getResponseSignatureValue(response)
+type SignatureImageProps = {
+  sources: string[]
+  fallback?: string
+  className?: string
+}
 
-  if (!signature) {
-    return <span className="text-sm font-semibold text-slate-400">—</span>
-  }
+function SignatureImage({ sources, fallback = "", className = "" }: SignatureImageProps) {
+  const [sourceIndex, setSourceIndex] = useState(0)
+  const source = sources[sourceIndex]
 
-  if (isImageSignatureValue(signature)) {
+  useEffect(() => {
+    setSourceIndex(0)
+  }, [sources.join("|")])
+
+  if (source) {
     return (
       <img
-        src={signature}
+        src={source}
         alt="Respondent signature"
-        className="max-h-16 rounded-lg border border-slate-200 bg-white p-2"
+        referrerPolicy="no-referrer"
+        className={className}
+        onError={() => setSourceIndex((currentIndex) => currentIndex + 1)}
       />
     )
   }
 
-  return <span className="text-sm font-bold text-slate-700">{signature}</span>
+  if (fallback) {
+    return <span className="text-sm font-bold text-slate-700">{fallback}</span>
+  }
+
+  return <span className="text-sm font-semibold text-slate-400">—</span>
+}
+
+function renderSignatureValue(response: SurveyResponseSummary) {
+  return (
+    <SignatureImage
+      sources={getResponseSignatureImageSources(response)}
+      fallback={getResponseSignatureFallbackValue(response)}
+      className="max-h-16 rounded-lg border border-slate-200 bg-white p-2"
+    />
+  )
 }
 
 export function Respondents() {
@@ -184,7 +287,8 @@ export function Respondents() {
       )
     : 0
   const selectedRespondentName = selectedResponse ? getRespondentDisplayName(selectedResponse, selectedResponseIndex) : ""
-  const selectedSignatureValue = selectedResponse ? getResponseSignatureValue(selectedResponse) : ""
+  const selectedSignatureSources = selectedResponse ? getResponseSignatureImageSources(selectedResponse) : []
+  const selectedSignatureFallback = selectedResponse ? getResponseSignatureFallbackValue(selectedResponse) : ""
 
   const responseColumnDefs = useMemo<ColDef<SurveyResponseSummary>[]>(
     () => [
@@ -243,10 +347,7 @@ export function Respondents() {
         key: "respondentSignature",
         header: "Signature",
         getValue: (row) => getSignatureExportValue(row),
-        getImageValue: (row) => {
-          const signature = getResponseSignatureValue(row)
-          return isDataSignatureImage(signature) ? signature : ""
-        },
+        getImageValue: (row) => getResponseSignatureImageSources(row).find((source) => /^data:image\//i.test(source)) ?? "",
         renderValue: (row) => renderSignatureValue(row),
       },
       { key: "answerCount", header: "Answers" },
@@ -593,18 +694,16 @@ export function Respondents() {
                     <SummaryCard label="Submitted" value={formatDate(selectedResponse.submittedAt)} />
                   </div>
 
-                  {selectedSignatureValue ? (
+                  {selectedSignatureSources.length > 0 || selectedSignatureFallback ? (
                     <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
                       <p className="text-xs font-black uppercase tracking-wide text-cyan-700">Respondent Signature</p>
-                      {isImageSignatureValue(selectedSignatureValue) ? (
-                        <img
-                          src={selectedSignatureValue}
-                          alt="Respondent signature"
-                          className="mt-3 max-h-32 rounded-xl border border-cyan-200 bg-white p-3"
+                      <div className="mt-3 rounded-xl border border-cyan-200 bg-white p-3">
+                        <SignatureImage
+                          sources={selectedSignatureSources}
+                          fallback={selectedSignatureFallback}
+                          className="max-h-32"
                         />
-                      ) : (
-                        <p className="mt-2 text-xl font-black text-slate-950">{selectedSignatureValue}</p>
-                      )}
+                      </div>
                     </div>
                   ) : null}
                 </div>
