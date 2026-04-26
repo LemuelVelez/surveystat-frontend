@@ -994,6 +994,7 @@ export function Respondents() {
                     rowData={responses}
                     columnDefs={responseColumnDefs}
                     defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                    theme="legacy"
                     pagination
                     paginationPageSize={10}
                     paginationPageSizeSelector={false}
@@ -1071,6 +1072,7 @@ export function Respondents() {
                       rowData={answers}
                       columnDefs={answerColumnDefs}
                       defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                      theme="legacy"
                       pagination
                       paginationPageSize={10}
                       paginationPageSizeSelector={false}
