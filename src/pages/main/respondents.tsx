@@ -114,7 +114,8 @@ function getRawSignatureValues(response: SurveyResponseSummary) {
 function decodeSignatureEntities(value: string) {
   return value
     .trim()
-    .replace(/^['"]+|['"]+$/g, "")
+    .replace(/^[']+|[']+$/g, "")
+    .replace(/^["]+|["]+$/g, "")
     .replace(/\\\//g, "/")
     .replace(/&amp;/gi, "&")
     .replace(/&#x2F;/gi, "/")
@@ -319,7 +320,7 @@ function SignatureImage({ sources, fallback = "", className = "" }: SignatureIma
   }
 
   if (fallback) {
-    return <span className="text-sm font-bold text-slate-700">{fallback}</span>
+    return <span className="text-sm font-bold text-slate-700 wrap-anywhere">{fallback}</span>
   }
 
   return <span className="text-sm font-semibold text-slate-400">—</span>
@@ -341,7 +342,7 @@ function renderSignatureSummaryValue(response: SurveyResponseSummary) {
 
   if (sources.length > 0 || fallback) {
     return (
-      <div className="flex min-h-24 items-center">
+      <div className="flex min-h-24 min-w-0 items-center">
         <SignatureImage
           sources={sources}
           fallback={fallback}
@@ -389,6 +390,84 @@ function SelectionCheckbox({ checked, indeterminate = false, disabled = false, l
         className="size-4 cursor-pointer rounded border border-slate-300 bg-white accent-cyan-600 disabled:cursor-not-allowed disabled:opacity-50"
       />
     </label>
+  )
+}
+
+function GridViewport({ children }: { children: ReactNode }) {
+  return (
+    <div className="surveystat-grid-shell min-w-0 overflow-hidden rounded-2xl border border-slate-100">
+      <style>{`
+        .surveystat-grid-shell .ag-root-wrapper,
+        .surveystat-grid-shell .ag-root,
+        .surveystat-grid-shell .ag-body,
+        .surveystat-grid-shell .ag-body-viewport {
+          min-width: 0;
+        }
+
+        .surveystat-grid-shell .ag-paging-panel {
+          box-sizing: border-box;
+          height: auto;
+          min-height: 64px;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: center;
+          gap: 0.25rem 0.5rem;
+          padding: 0.5rem;
+          font-size: 0.75rem;
+          line-height: 1.25rem;
+        }
+
+        .surveystat-grid-shell .ag-paging-row-summary-panel,
+        .surveystat-grid-shell .ag-paging-page-summary-panel {
+          display: flex;
+          min-width: 0;
+          flex: 0 1 auto;
+          align-items: center;
+          justify-content: center;
+          gap: 0.25rem;
+          margin: 0;
+          white-space: nowrap;
+        }
+
+        .surveystat-grid-shell .ag-paging-description,
+        .surveystat-grid-shell .ag-paging-number,
+        .surveystat-grid-shell .ag-paging-row-summary-panel span {
+          flex-shrink: 0;
+          white-space: nowrap;
+        }
+
+        .surveystat-grid-shell .ag-paging-page-size {
+          display: none;
+        }
+
+        @media (max-width: 420px) {
+          .surveystat-grid-shell .ag-paging-panel {
+            min-height: 86px;
+            gap: 0.125rem 0.25rem;
+            padding: 0.5rem 0.25rem;
+            font-size: 0.6875rem;
+          }
+
+          .surveystat-grid-shell .ag-paging-page-summary-panel {
+            order: 1;
+            flex-basis: 100%;
+          }
+
+          .surveystat-grid-shell .ag-paging-row-summary-panel {
+            order: 2;
+            flex-basis: 100%;
+          }
+
+          .surveystat-grid-shell .ag-paging-button {
+            width: 1.75rem;
+            min-width: 1.75rem;
+            height: 1.75rem;
+            margin: 0;
+          }
+        }
+      `}</style>
+      {children}
+    </div>
   )
 }
 
@@ -516,20 +595,20 @@ export function Respondents() {
           )
         },
       },
-      { field: "formTitle", headerName: "Survey", minWidth: 260, flex: 1 },
+      { field: "formTitle", headerName: "Survey", minWidth: 240, flex: 1 },
       {
         field: "respondentFullName",
         headerName: "Respondent",
-        minWidth: 220,
+        minWidth: 200,
         flex: 1,
         valueGetter: (params) => (params.data ? getRespondentDisplayName(params.data, params.node?.rowIndex ?? 0) : "Anonymous"),
       },
-      { field: "respondentEmail", headerName: "Email", minWidth: 220, flex: 1 },
-      { field: "respondentRole", headerName: "Role", width: 160 },
+      { field: "respondentEmail", headerName: "Email", minWidth: 200, flex: 1 },
+      { field: "respondentRole", headerName: "Role", width: 150 },
       {
         field: "respondentSignature",
         headerName: "Signature",
-        minWidth: 180,
+        minWidth: 170,
         flex: 1,
         valueGetter: (params) => (params.data ? getSignatureExportValue(params.data) : "—"),
       },
@@ -539,7 +618,7 @@ export function Respondents() {
       {
         field: "submittedAt",
         headerName: "Submitted",
-        minWidth: 220,
+        minWidth: 210,
         flex: 1,
         valueFormatter: (params) => formatDate(params.value),
       },
@@ -549,11 +628,11 @@ export function Respondents() {
 
   const answerColumnDefs = useMemo<ColDef<SurveyResponseAnswer>[]>(
     () => [
-      { field: "sectionTitle", headerName: "Section", minWidth: 220, flex: 1 },
-      { field: "itemCode", headerName: "Code", width: 140 },
-      { field: "itemStatement", headerName: "Checklist Item", minWidth: 420, flex: 2 },
+      { field: "sectionTitle", headerName: "Section", minWidth: 200, flex: 1 },
+      { field: "itemCode", headerName: "Code", width: 130 },
+      { field: "itemStatement", headerName: "Checklist Item", minWidth: 320, flex: 2 },
       { field: "rating", headerName: "Rating", width: 120 },
-      { field: "interpretation", headerName: "Interpretation", minWidth: 180, flex: 1 },
+      { field: "interpretation", headerName: "Interpretation", minWidth: 170, flex: 1 },
     ],
     [],
   )
@@ -780,76 +859,75 @@ export function Respondents() {
     }
   }
 
-
   useEffect(() => {
     loadRespondentsPage("")
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-950">
-      <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-        <header className="mb-8 rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div>
+    <main className="min-h-screen overflow-x-hidden bg-slate-100 text-slate-950">
+      <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-8 lg:px-8">
+        <header className="mb-6 rounded-2xl bg-slate-950 p-4 text-white shadow-xl sm:mb-8 sm:rounded-3xl sm:p-6">
+          <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
               <Link to="/" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-cyan-200 hover:text-cyan-100">
-                <ArrowLeft className="size-4" />
-                Back to Home
+                <ArrowLeft className="size-4 shrink-0" />
+                <span className="truncate">Back to Home</span>
               </Link>
-              <div className="flex items-start gap-4">
-                <span className="flex size-12 items-center justify-center rounded-2xl bg-cyan-400 text-slate-950">
-                  <UsersRound className="size-6" />
+              <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-cyan-400 text-slate-950 sm:size-12">
+                  <UsersRound className="size-5 sm:size-6" />
                 </span>
-                <div>
-                  <h1 className="text-3xl font-black tracking-tight md:text-4xl">Respondents</h1>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                <div className="min-w-0">
+                  <h1 className="wrap-break-word text-2xl font-black tracking-tight sm:text-3xl md:text-4xl">Respondents</h1>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300 wrap-anywhere">
                     Collect, filter, and review submitted responses from every survey form in one page.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2 lg:flex lg:flex-col xl:flex-row">
               <button
                 type="button"
                 onClick={() => copyText(selectedShareUrl, "Survey share link copied.")}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300"
+                className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 sm:px-5"
               >
-                <Copy className="size-4" />
-                Copy Share Link
+                <Copy className="size-4 shrink-0" />
+                <span className="truncate">Copy Share Link</span>
               </button>
               <button
                 type="button"
                 onClick={() => loadRespondentsPage(selectedFormCode)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10 sm:px-5"
               >
-                <RefreshCcw className="size-4" />
-                Refresh
+                <RefreshCcw className="size-4 shrink-0" />
+                <span className="truncate">Refresh</span>
               </button>
             </div>
           </div>
         </header>
 
         {errorMessage ? (
-          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm font-medium text-red-700 wrap-anywhere sm:px-5">
             {errorMessage}
           </div>
         ) : null}
 
-        <section className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-xl font-black">Survey Response Filter</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
+        <section className="mb-6 rounded-2xl bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+          <div className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h2 className="wrap-break-word text-lg font-black sm:text-xl">Survey Response Filter</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-500 wrap-anywhere">
                 Choose which survey responses to view, or select all surveys for the complete collection.
               </p>
             </div>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600">
+            <span className="max-w-full rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600 wrap-anywhere sm:max-w-sm">
               {selectedForm?.title ?? "All survey responses"}
             </span>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <SurveyFilterButton
               title="All Surveys"
               subtitle="View responses from every survey form"
@@ -871,7 +949,7 @@ export function Respondents() {
           </div>
         </section>
 
-        <section className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <section className="mb-6 grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <SummaryCard label="Responses" value={responseCount} />
           <SummaryCard label="Respondents" value={respondentCount} />
           <SummaryCard label="Answers" value={answerCount} />
@@ -879,11 +957,11 @@ export function Respondents() {
         </section>
 
         {isLoading ? (
-          <div className="flex min-h-96 items-center justify-center rounded-3xl bg-white shadow-sm">
+          <div className="flex min-h-96 items-center justify-center rounded-2xl bg-white shadow-sm sm:rounded-3xl">
             <Loader2 className="size-8 animate-spin text-cyan-600" />
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             <GridCard
               title="Survey Responses"
               rows={responses.length}
@@ -893,67 +971,70 @@ export function Respondents() {
                     type="button"
                     onClick={() => setIsResponsesPreviewOpen(true)}
                     disabled={responses.length === 0}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+                    className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
                   >
-                    <FileDown className="size-4" />
-                    {selectedResponses.length > 0 ? `Preview Selected (${selectedResponses.length})` : "Preview Export"}
+                    <FileDown className="size-4 shrink-0" />
+                    <span className="truncate">{selectedResponses.length > 0 ? `Preview Selected (${selectedResponses.length})` : "Preview Export"}</span>
                   </button>
                   <button
                     type="button"
                     onClick={openDeleteResponsesDialog}
                     disabled={responses.length === 0 || isDeleting}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                   >
-                    {isDeleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-                    {deleteButtonLabel}
+                    {isDeleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4 shrink-0" />}
+                    <span className="truncate">{deleteButtonLabel}</span>
                   </button>
                 </>
               }
             >
-              <div className="ag-theme-quartz h-96 w-full">
-                <AgGridReact
-                  rowData={responses}
-                  columnDefs={responseColumnDefs}
-                  defaultColDef={{ sortable: true, filter: true, resizable: true }}
-                  pagination
-                  paginationPageSize={10}
-                  animateRows
-                  getRowId={(params) => params.data?.id ?? ""}
-                  onRowClicked={handleRowClicked}
-                />
-              </div>
+              <GridViewport>
+                <div className="ag-theme-quartz h-96 w-full min-w-0">
+                  <AgGridReact
+                    rowData={responses}
+                    columnDefs={responseColumnDefs}
+                    defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                    pagination
+                    paginationPageSize={10}
+                    paginationPageSizeSelector={false}
+                    animateRows
+                    getRowId={(params) => params.data?.id ?? ""}
+                    onRowClicked={handleRowClicked}
+                  />
+                </div>
+              </GridViewport>
             </GridCard>
 
             <GridCard title={selectedResponse ? `Response Result · ${selectedResponse.formTitle}` : "Response Result"} rows={answers.length}>
               {selectedResponse ? (
                 <div className="mb-4 space-y-4">
-                  <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <p className="text-sm font-black text-slate-950">{selectedRespondentName}</p>
-                      <p className="mt-1 text-sm text-slate-500">{selectedResponse.respondentEmail || "No respondent email"}</p>
+                  <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-black text-slate-950 wrap-anywhere">{selectedRespondentName}</p>
+                      <p className="mt-1 text-sm text-slate-500 wrap-anywhere">{selectedResponse.respondentEmail || "No respondent email"}</p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-2 lg:flex lg:flex-wrap">
                       <button
                         type="button"
                         onClick={openResponsePreview}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500"
+                        className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500 sm:w-auto"
                       >
-                        <Eye className="size-4" />
-                        Preview Export
+                        <Eye className="size-4 shrink-0" />
+                        <span className="truncate">Preview Export</span>
                       </button>
                       <button
                         type="button"
                         disabled={isResending || !selectedResponse.respondentEmail}
                         onClick={resendResponseReviewEmail}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                       >
-                        {isResending ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
-                        Resend Review
+                        {isResending ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4 shrink-0" />}
+                        <span className="truncate">Resend Review</span>
                       </button>
                     </div>
                   </div>
 
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <SummaryCard label="Respondent" value={selectedRespondentName} />
                     <SummaryCard label="Weighted Mean" value={formatNumber(selectedResponse.weightedMean)} />
                     <SummaryCard label="Interpretation" value={selectedResponse.interpretation || "No data"} />
@@ -967,7 +1048,7 @@ export function Respondents() {
                         <SignatureImage
                           sources={selectedSignatureSources}
                           fallback={selectedSignatureFallback}
-                          className="max-h-32"
+                          className="max-h-32 max-w-full"
                         />
                       </div>
                     </div>
@@ -984,16 +1065,19 @@ export function Respondents() {
                   <Loader2 className="size-8 animate-spin text-cyan-600" />
                 </div>
               ) : (
-                <div className="ag-theme-quartz h-96 w-full">
-                  <AgGridReact
-                    rowData={answers}
-                    columnDefs={answerColumnDefs}
-                    defaultColDef={{ sortable: true, filter: true, resizable: true }}
-                    pagination
-                    paginationPageSize={10}
-                    animateRows
-                  />
-                </div>
+                <GridViewport>
+                  <div className="ag-theme-quartz h-96 w-full min-w-0">
+                    <AgGridReact
+                      rowData={answers}
+                      columnDefs={answerColumnDefs}
+                      defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                      pagination
+                      paginationPageSize={10}
+                      paginationPageSizeSelector={false}
+                      animateRows
+                    />
+                  </div>
+                </GridViewport>
               )}
             </GridCard>
           </div>
@@ -1047,14 +1131,14 @@ export function Respondents() {
       />
 
       {pendingDeleteCount > 0 ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl shadow-slate-950/30">
-            <div className="flex items-start gap-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 px-3 py-3 backdrop-blur-sm sm:items-center sm:px-4">
+          <div className="max-h-[calc(100svh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl shadow-slate-950/30 sm:rounded-3xl sm:p-6">
+            <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
               <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-700">
                 <Trash2 className="size-6" />
               </span>
-              <div>
-                <h2 className="text-2xl font-black tracking-tight text-slate-950">
+              <div className="min-w-0">
+                <h2 className="wrap-break-word text-xl font-black tracking-tight text-slate-950 sm:text-2xl">
                   {pendingDeleteCount === responses.length ? "Delete all survey responses?" : `Delete ${pendingDeleteCount} survey response${pendingDeleteCount === 1 ? "" : "s"}?`}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -1063,7 +1147,7 @@ export function Respondents() {
                 <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm">
                   {pendingDeleteCount === 1 ? (
                     <>
-                      <p className="font-black text-slate-950">
+                      <p className="font-black text-slate-950 wrap-anywhere">
                         {getRespondentDisplayName(
                           pendingDeleteResponses[0],
                           Math.max(
@@ -1072,7 +1156,7 @@ export function Respondents() {
                           ),
                         )}
                       </p>
-                      <p className="mt-1 text-slate-500">{pendingDeleteResponses[0].formTitle}</p>
+                      <p className="mt-1 text-slate-500 wrap-anywhere">{pendingDeleteResponses[0].formTitle}</p>
                     </>
                   ) : (
                     <>
@@ -1091,7 +1175,7 @@ export function Respondents() {
                 type="button"
                 onClick={() => setPendingDeleteResponses([])}
                 disabled={isDeleting}
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
                 Cancel
               </button>
@@ -1099,7 +1183,7 @@ export function Respondents() {
                 type="button"
                 onClick={confirmDeleteResponses}
                 disabled={isDeleting}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-black text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-red-300"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-black text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-red-300 sm:w-auto"
               >
                 {isDeleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
                 Delete
@@ -1125,11 +1209,11 @@ function SurveyFilterButton({ title, subtitle, isActive, icon, onClick }: Survey
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-2xl border p-4 text-left transition ${
+      className={`min-w-0 rounded-2xl border p-4 text-left transition ${
         isActive ? "border-cyan-400 bg-cyan-50 shadow-sm" : "border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50/50"
       }`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex min-w-0 items-start gap-3">
         <span
           className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
             isActive ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-500"
@@ -1137,9 +1221,9 @@ function SurveyFilterButton({ title, subtitle, isActive, icon, onClick }: Survey
         >
           {icon}
         </span>
-        <span>
-          <span className="line-clamp-2 block font-black text-slate-950">{title}</span>
-          <span className="mt-1 line-clamp-1 block text-sm font-semibold text-slate-500">{subtitle}</span>
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-2 block font-black text-slate-950 wrap-anywhere">{title}</span>
+          <span className="mt-1 line-clamp-2 block text-sm font-semibold text-slate-500 wrap-anywhere">{subtitle}</span>
         </span>
       </div>
     </button>
@@ -1153,9 +1237,9 @@ type SummaryCardProps = {
 
 function SummaryCard({ label, value }: SummaryCardProps) {
   return (
-    <div className="rounded-3xl bg-white p-6 shadow-sm">
-      <p className="text-sm font-bold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-3 wrap-break-word text-2xl font-black tracking-tight text-slate-950">{value}</p>
+    <div className="min-w-0 rounded-2xl bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500 sm:text-sm">{label}</p>
+      <p className="mt-3 text-xl font-black tracking-tight text-slate-950 wrap-break-word sm:text-2xl">{value}</p>
     </div>
   )
 }
@@ -1169,17 +1253,17 @@ type GridCardProps = {
 
 function GridCard({ title, rows, actions, children }: GridCardProps) {
   return (
-    <section className="rounded-3xl bg-white p-6 shadow-sm">
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
+    <section className="min-w-0 rounded-2xl bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+      <div className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
             <Table2 className="size-5" />
           </span>
-          <h2 className="text-xl font-black">{title}</h2>
+          <h2 className="min-w-0 wrap-break-word text-lg font-black sm:text-xl">{title}</h2>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid w-full min-w-0 gap-2 sm:w-auto sm:grid-flow-col sm:auto-cols-max sm:items-center">
           {actions}
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600">{rows} rows</span>
+          <span className="inline-flex w-full justify-center rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600 sm:w-auto">{rows} rows</span>
         </div>
       </div>
       {children}

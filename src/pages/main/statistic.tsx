@@ -446,7 +446,7 @@ function PlotlyChart(props: PlotlyChartProps) {
 
   if (!PlotComponent) {
     return (
-      <div className="flex h-96 items-center justify-center rounded-2xl bg-slate-50">
+      <div className="flex h-80 items-center justify-center rounded-2xl bg-slate-50 sm:h-96">
         <Loader2 className="size-8 animate-spin text-cyan-600" />
       </div>
     )
@@ -457,8 +457,86 @@ function PlotlyChart(props: PlotlyChartProps) {
 
 function EmptyChartState({ message }: { message: string }) {
   return (
-    <div className="flex h-96 items-center justify-center rounded-2xl bg-slate-50 p-6 text-center">
-      <p className="max-w-sm text-sm font-semibold leading-6 text-slate-500">{message}</p>
+    <div className="flex h-80 items-center justify-center rounded-2xl bg-slate-50 p-6 text-center sm:h-96">
+      <p className="max-w-sm text-sm font-semibold leading-6 text-slate-500 wrap-anywhere">{message}</p>
+    </div>
+  )
+}
+
+function GridViewport({ children }: { children: ReactNode }) {
+  return (
+    <div className="surveystat-grid-shell min-w-0 overflow-hidden rounded-2xl border border-slate-100">
+      <style>{`
+        .surveystat-grid-shell .ag-root-wrapper,
+        .surveystat-grid-shell .ag-root,
+        .surveystat-grid-shell .ag-body,
+        .surveystat-grid-shell .ag-body-viewport {
+          min-width: 0;
+        }
+
+        .surveystat-grid-shell .ag-paging-panel {
+          box-sizing: border-box;
+          height: auto;
+          min-height: 64px;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: center;
+          gap: 0.25rem 0.5rem;
+          padding: 0.5rem;
+          font-size: 0.75rem;
+          line-height: 1.25rem;
+        }
+
+        .surveystat-grid-shell .ag-paging-row-summary-panel,
+        .surveystat-grid-shell .ag-paging-page-summary-panel {
+          display: flex;
+          min-width: 0;
+          flex: 0 1 auto;
+          align-items: center;
+          justify-content: center;
+          gap: 0.25rem;
+          margin: 0;
+          white-space: nowrap;
+        }
+
+        .surveystat-grid-shell .ag-paging-description,
+        .surveystat-grid-shell .ag-paging-number,
+        .surveystat-grid-shell .ag-paging-row-summary-panel span {
+          flex-shrink: 0;
+          white-space: nowrap;
+        }
+
+        .surveystat-grid-shell .ag-paging-page-size {
+          display: none;
+        }
+
+        @media (max-width: 420px) {
+          .surveystat-grid-shell .ag-paging-panel {
+            min-height: 86px;
+            gap: 0.125rem 0.25rem;
+            padding: 0.5rem 0.25rem;
+            font-size: 0.6875rem;
+          }
+
+          .surveystat-grid-shell .ag-paging-page-summary-panel {
+            order: 1;
+            flex-basis: 100%;
+          }
+
+          .surveystat-grid-shell .ag-paging-row-summary-panel {
+            order: 2;
+            flex-basis: 100%;
+          }
+
+          .surveystat-grid-shell .ag-paging-button {
+            width: 1.75rem;
+            min-width: 1.75rem;
+            height: 1.75rem;
+            margin: 0;
+          }
+        }
+      `}</style>
+      {children}
     </div>
   )
 }
@@ -580,12 +658,12 @@ export function Statistic() {
 
   const sectionColumnDefs = useMemo<ColDef<SurveySectionStatistics>[]>(
     () => [
-      { field: "formTitle", headerName: "Form", minWidth: 220, flex: 1 },
-      { field: "sectionTitle", headerName: "Section", minWidth: 260, flex: 1 },
+      { field: "formTitle", headerName: "Form", minWidth: 200, flex: 1 },
+      { field: "sectionTitle", headerName: "Section", minWidth: 240, flex: 1 },
       { field: "count", headerName: "Answers", width: 120 },
       { field: "weightedMean", headerName: "Weighted Mean", width: 160 },
       { field: "standardDeviation", headerName: "Std. Dev.", width: 130 },
-      { field: "interpretation", headerName: "Interpretation", minWidth: 180, flex: 1 },
+      { field: "interpretation", headerName: "Interpretation", minWidth: 170, flex: 1 },
       { field: "meanRange", headerName: "Mean Range", width: 140 },
     ],
     [],
@@ -593,14 +671,14 @@ export function Statistic() {
 
   const itemColumnDefs = useMemo<ColDef<SurveyItemStatistics>[]>(
     () => [
-      { field: "formTitle", headerName: "Form", minWidth: 220, flex: 1 },
-      { field: "sectionTitle", headerName: "Section", minWidth: 220, flex: 1 },
+      { field: "formTitle", headerName: "Form", minWidth: 200, flex: 1 },
+      { field: "sectionTitle", headerName: "Section", minWidth: 200, flex: 1 },
       { field: "itemCode", headerName: "Code", width: 120 },
-      { field: "itemStatement", headerName: "Item Statement", minWidth: 360, flex: 2 },
+      { field: "itemStatement", headerName: "Item Statement", minWidth: 320, flex: 2 },
       { field: "count", headerName: "Answers", width: 120 },
       { field: "weightedMean", headerName: "Weighted Mean", width: 160 },
       { field: "standardDeviation", headerName: "Std. Dev.", width: 130 },
-      { field: "interpretation", headerName: "Interpretation", minWidth: 180, flex: 1 },
+      { field: "interpretation", headerName: "Interpretation", minWidth: 170, flex: 1 },
       { field: "meanRange", headerName: "Mean Range", width: 140 },
     ],
     [],
@@ -677,74 +755,74 @@ export function Statistic() {
   }, [])
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-950">
-      <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-        <header className="mb-8 rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div>
+    <main className="min-h-screen overflow-x-hidden bg-slate-100 text-slate-950">
+      <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-8 lg:px-8">
+        <header className="mb-6 rounded-2xl bg-slate-950 p-4 text-white shadow-xl sm:mb-8 sm:rounded-3xl sm:p-6">
+          <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
               <Link to="/" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-cyan-200 hover:text-cyan-100">
-                <ArrowLeft className="size-4" />
-                Back to Home
+                <ArrowLeft className="size-4 shrink-0" />
+                <span className="truncate">Back to Home</span>
               </Link>
-              <div className="flex items-start gap-4">
-                <span className="flex size-12 items-center justify-center rounded-2xl bg-cyan-400 text-slate-950">
-                  <BarChart3 className="size-6" />
+              <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-cyan-400 text-slate-950 sm:size-12">
+                  <BarChart3 className="size-5 sm:size-6" />
                 </span>
-                <div>
-                  <h1 className="text-3xl font-black tracking-tight md:text-4xl">Survey Statistics</h1>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                <div className="min-w-0">
+                  <h1 className="wrap-break-word text-2xl font-black tracking-tight sm:text-3xl md:text-4xl">Survey Statistics</h1>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300 wrap-anywhere">
                     Select one survey first, then compute descriptive statistics with a detailed weighted-mean solution.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2 lg:flex lg:flex-col xl:flex-row">
               <button
                 type="button"
                 disabled={!selectedFormCode || isComputing}
                 onClick={() => loadStatistics(selectedFormCode)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+                className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 sm:px-5"
               >
-                {isComputing ? <Loader2 className="size-4 animate-spin" /> : <Calculator className="size-4" />}
-                Compute Selected Survey
+                {isComputing ? <Loader2 className="size-4 animate-spin" /> : <Calculator className="size-4 shrink-0" />}
+                <span className="truncate">Compute Selected Survey</span>
               </button>
               <button
                 type="button"
                 disabled={!hasComputed || isComputing}
                 onClick={() => setIsPreviewOpen(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
+                className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300 sm:px-5"
               >
-                <Eye className="size-4" />
-                Preview Result
+                <Eye className="size-4 shrink-0" />
+                <span className="truncate">Preview Result</span>
               </button>
               <button
                 type="button"
                 onClick={() => (hasComputed ? loadStatistics(selectedFormCode) : loadForms())}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10 sm:col-span-2 sm:px-5 xl:col-span-1"
               >
-                <RefreshCcw className="size-4" />
-                Refresh
+                <RefreshCcw className="size-4 shrink-0" />
+                <span className="truncate">Refresh</span>
               </button>
             </div>
           </div>
         </header>
 
         {errorMessage ? (
-          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
+          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm font-medium text-red-700 wrap-anywhere sm:px-5">
             {errorMessage}
           </div>
         ) : null}
 
-        <section className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-xl font-black">Choose Survey to Compute</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
+        <section className="mb-6 rounded-2xl bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+          <div className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h2 className="wrap-break-word text-lg font-black sm:text-xl">Choose Survey to Compute</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-500 wrap-anywhere">
                 Statistics are computed only after selecting a specific survey form.
               </p>
             </div>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600">
+            <span className="max-w-full rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600 wrap-anywhere sm:max-w-sm">
               {selectedFormCode ? selectedFormTitle : "No survey selected"}
             </span>
           </div>
@@ -754,7 +832,7 @@ export function Statistic() {
               <Loader2 className="size-8 animate-spin text-cyan-600" />
             </div>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {forms.map((form) => {
                 const isSelected = selectedFormCode === form.code
 
@@ -763,13 +841,13 @@ export function Statistic() {
                     key={form.id}
                     type="button"
                     onClick={() => selectSurvey(form.code)}
-                    className={`rounded-2xl border p-4 text-left transition ${
+                    className={`min-w-0 rounded-2xl border p-4 text-left transition ${
                       isSelected
                         ? "border-cyan-400 bg-cyan-50 shadow-sm"
                         : "border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50/50"
                     }`}
                   >
-                    <div className="flex items-start gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
                       <span
                         className={`mt-1 flex size-9 shrink-0 items-center justify-center rounded-xl ${
                           isSelected ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-500"
@@ -777,12 +855,12 @@ export function Statistic() {
                       >
                         {isSelected ? <CheckCircle2 className="size-5" /> : form.surveyStepNumber ?? 1}
                       </span>
-                      <span>
-                        <span className="block text-xs font-black uppercase tracking-wide text-cyan-700">
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs font-black uppercase tracking-wide text-cyan-700 wrap-anywhere">
                           {form.code}
                         </span>
-                        <span className="mt-1 block font-black text-slate-950">{form.title}</span>
-                        <span className="mt-2 line-clamp-2 block text-sm leading-6 text-slate-500">{form.description}</span>
+                        <span className="mt-1 line-clamp-2 block font-black text-slate-950 wrap-anywhere">{form.title}</span>
+                        <span className="mt-2 line-clamp-3 block text-sm leading-6 text-slate-500 wrap-anywhere">{form.description}</span>
                       </span>
                     </div>
                   </button>
@@ -793,23 +871,23 @@ export function Statistic() {
         </section>
 
         {!hasComputed ? (
-          <section className="rounded-3xl bg-white p-8 text-center shadow-sm">
+          <section className="rounded-2xl bg-white p-5 text-center shadow-sm sm:rounded-3xl sm:p-8">
             <Calculator className="mx-auto size-12 text-slate-300" />
-            <h2 className="mt-4 text-2xl font-black">No computed result yet</h2>
-            <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            <h2 className="mt-4 text-xl font-black sm:text-2xl">No computed result yet</h2>
+            <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-500 wrap-anywhere">
               Select a survey card above and click Compute Selected Survey to show the rating distribution, weighted mean,
               interpretation, and detailed solution.
             </p>
           </section>
         ) : isComputing ? (
-          <div className="flex min-h-96 items-center justify-center rounded-3xl bg-white shadow-sm">
+          <div className="flex min-h-96 items-center justify-center rounded-2xl bg-white shadow-sm sm:rounded-3xl">
             <Loader2 className="size-8 animate-spin text-cyan-600" />
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             <MethodReferenceCard />
 
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <section className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-5">
               <SummaryCard label="Responses" value={totalResponseCount} />
               <SummaryCard label="Respondents" value={totalRespondentCount} />
               <SummaryCard label="Answer Count" value={summary.answerCount} />
@@ -824,7 +902,7 @@ export function Statistic() {
 
             <SectionMeanSummary sections={sectionStatistics} onSectionClick={setSelectedSection} />
 
-            <section className="grid gap-6 xl:grid-cols-2">
+            <section className="grid min-w-0 gap-6 xl:grid-cols-2">
               <ChartCard title="Rating Distribution">
                 <PlotlyChart
                   data={[
@@ -840,11 +918,11 @@ export function Statistic() {
                     title: { text: `Responses by Likert Rating · ${selectedFormTitle}` },
                     xaxis: { title: { text: "Likert Rating" } },
                     yaxis: { title: { text: "Count" }, rangemode: "tozero" },
-                    margin: { l: 50, r: 20, t: 50, b: 50 },
+                    margin: { l: 42, r: 12, t: 50, b: 50 },
                   }}
                   config={{ responsive: true, displayModeBar: false }}
                   useResizeHandler
-                  className="h-96 w-full"
+                  className="h-80 w-full sm:h-96"
                   style={{ width: "100%", height: "100%" }}
                 />
               </ChartCard>
@@ -862,25 +940,25 @@ export function Statistic() {
                   layout={{
                     autosize: true,
                     title: { text: "Selected Survey Weighted Mean" },
-                    margin: { l: 20, r: 20, t: 50, b: 20 },
+                    margin: { l: 12, r: 12, t: 50, b: 20 },
                     showlegend: true,
                   }}
                   config={{ responsive: true, displayModeBar: false }}
                   useResizeHandler
-                  className="h-96 w-full"
+                  className="h-80 w-full sm:h-96"
                   style={{ width: "100%", height: "100%" }}
                 />
               </ChartCard>
             </section>
 
             <CalculationSolution title={`Detailed Solution · ${selectedFormTitle}`}>
-              <div className="grid gap-3">
+              <div className="grid min-w-0 gap-3">
                 {calculationSteps.map((step, index) => (
-                  <div key={`${step.label}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-sm font-black uppercase tracking-wide text-cyan-700">
+                  <div key={`${step.label}-${index}`} className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-black uppercase tracking-wide text-cyan-700 wrap-anywhere">
                       Step {index + 1}: {step.label}
                     </p>
-                    <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                    <div className="mt-3 grid min-w-0 gap-3 lg:grid-cols-3">
                       <SolutionBlock label="Formula" value={step.formula} />
                       <SolutionBlock label="Substitution" value={step.substitution} />
                       <SolutionBlock label="Result" value={step.result} />
@@ -891,33 +969,37 @@ export function Statistic() {
             </CalculationSolution>
 
             <GridCard title="Section Statistics" rows={sectionStatistics.length}>
-              <div className="ag-theme-quartz h-96 w-full">
-                <AgGridReact
-                  rowData={sectionStatistics}
-                  columnDefs={sectionColumnDefs}
-                  defaultColDef={{ sortable: true, filter: true, resizable: true }}
-                  theme="legacy"
-                  pagination
-                  paginationPageSize={10}
-                  paginationPageSizeSelector={[10, 20, 50, 100]}
-                  animateRows
-                />
-              </div>
+              <GridViewport>
+                <div className="ag-theme-quartz h-96 w-full min-w-0">
+                  <AgGridReact
+                    rowData={sectionStatistics}
+                    columnDefs={sectionColumnDefs}
+                    defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                    theme="legacy"
+                    pagination
+                    paginationPageSize={10}
+                    paginationPageSizeSelector={false}
+                    animateRows
+                  />
+                </div>
+              </GridViewport>
             </GridCard>
 
             <GridCard title="Item Statistics" rows={itemStatistics.length}>
-              <div className="ag-theme-quartz h-96 w-full">
-                <AgGridReact
-                  rowData={itemStatistics}
-                  columnDefs={itemColumnDefs}
-                  defaultColDef={{ sortable: true, filter: true, resizable: true }}
-                  theme="legacy"
-                  pagination
-                  paginationPageSize={10}
-                  paginationPageSizeSelector={[10, 20, 50, 100]}
-                  animateRows
-                />
-              </div>
+              <GridViewport>
+                <div className="ag-theme-quartz h-96 w-full min-w-0">
+                  <AgGridReact
+                    rowData={itemStatistics}
+                    columnDefs={itemColumnDefs}
+                    defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                    theme="legacy"
+                    pagination
+                    paginationPageSize={10}
+                    paginationPageSizeSelector={false}
+                    animateRows
+                  />
+                </div>
+              </GridViewport>
             </GridCard>
           </div>
         )}
@@ -936,11 +1018,11 @@ export function Statistic() {
       >
         <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
           <p className="text-sm font-black uppercase tracking-wide text-slate-500">Result Narrative</p>
-          <p className="mt-2 text-sm font-semibold leading-6 text-slate-700">{overallResultNarrative}</p>
+          <p className="mt-2 text-sm font-semibold leading-6 text-slate-700 wrap-anywhere">{overallResultNarrative}</p>
           {sectionResultNarratives.length > 0 ? (
             <div className="mt-3 grid gap-2">
               {sectionResultNarratives.map((narrative) => (
-                <p key={narrative} className="rounded-xl bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-600">
+                <p key={narrative} className="rounded-xl bg-slate-50 p-3 text-sm font-semibold leading-6 text-slate-600 wrap-anywhere">
                   {narrative}
                 </p>
               ))}
@@ -953,14 +1035,14 @@ export function Statistic() {
           <div className="mt-3 grid gap-3">
             {calculationSteps.map((step, index) => (
               <div key={`${step.label}-${index}`} className="rounded-xl bg-white p-3">
-                <p className="text-sm font-black text-slate-950">Step {index + 1}: {step.label}</p>
-                <p className="mt-1 text-sm leading-6 text-slate-600">
+                <p className="text-sm font-black text-slate-950 wrap-anywhere">Step {index + 1}: {step.label}</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600 wrap-anywhere">
                   <span className="font-bold">Formula:</span> {step.formula}
                 </p>
-                <p className="text-sm leading-6 text-slate-600">
+                <p className="text-sm leading-6 text-slate-600 wrap-anywhere">
                   <span className="font-bold">Substitution:</span> {step.substitution}
                 </p>
-                <p className="text-sm leading-6 text-slate-600">
+                <p className="text-sm leading-6 text-slate-600 wrap-anywhere">
                   <span className="font-bold">Result:</span> {step.result}
                 </p>
               </div>
@@ -986,19 +1068,19 @@ type ResultNarrativeCardProps = {
 
 function ResultNarrativeCard({ overallNarrative, sectionNarratives }: ResultNarrativeCardProps) {
   return (
-    <section className="rounded-3xl bg-white p-6 shadow-sm">
-      <div className="flex items-start gap-4">
+    <section className="rounded-2xl bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
         <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
           <BookOpenCheck className="size-6" />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-xl font-black">Result Narrative</h2>
-          <p className="mt-2 text-sm font-semibold leading-7 text-slate-700">{overallNarrative}</p>
+          <h2 className="wrap-break-word text-lg font-black sm:text-xl">Result Narrative</h2>
+          <p className="mt-2 text-sm font-semibold leading-7 text-slate-700 wrap-anywhere">{overallNarrative}</p>
           {sectionNarratives.length > 0 ? (
-            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-2">
               {sectionNarratives.map((narrative) => (
-                <div key={narrative} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-semibold leading-6 text-slate-600">{narrative}</p>
+                <div key={narrative} className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold leading-6 text-slate-600 wrap-anywhere">{narrative}</p>
                 </div>
               ))}
             </div>
@@ -1016,12 +1098,12 @@ type SectionMeanSummaryProps = {
 
 function SectionMeanSummary({ sections, onSectionClick }: SectionMeanSummaryProps) {
   return (
-    <section className="rounded-3xl bg-white p-6 shadow-sm">
-      <div className="mb-4 flex items-center gap-3">
-        <span className="flex size-10 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
+    <section className="rounded-2xl bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+      <div className="mb-4 flex min-w-0 items-center gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
           <Calculator className="size-5" />
         </span>
-        <h2 className="text-xl font-black">Mean of Every Section</h2>
+        <h2 className="wrap-break-word text-lg font-black sm:text-xl">Mean of Every Section</h2>
       </div>
 
       {sections.length === 0 ? (
@@ -1029,21 +1111,21 @@ function SectionMeanSummary({ sections, onSectionClick }: SectionMeanSummaryProp
           No section-level results are available for this survey yet.
         </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {sections.map((section) => (
             <button
               key={section.sectionId}
               type="button"
               aria-label={`View detailed solution for ${section.sectionTitle}`}
               onClick={() => onSectionClick(section)}
-              className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-cyan-300 hover:bg-cyan-50 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
+              className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-cyan-300 hover:bg-cyan-50 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2"
             >
-              <p className="line-clamp-2 text-sm font-black text-slate-950">{section.sectionTitle}</p>
-              <p className="mt-3 text-3xl font-black tracking-tight text-cyan-700">
+              <p className="line-clamp-2 text-sm font-black text-slate-950 wrap-anywhere">{section.sectionTitle}</p>
+              <p className="mt-3 text-2xl font-black tracking-tight text-cyan-700 sm:text-3xl">
                 {formatNumber(section.weightedMean)}
               </p>
-              <p className="mt-1 text-sm font-bold text-slate-600">{section.interpretation}</p>
-              <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+              <p className="mt-1 text-sm font-bold text-slate-600 wrap-anywhere">{section.interpretation}</p>
+              <p className="mt-2 text-xs font-bold uppercase tracking-wide text-slate-400 wrap-anywhere">
                 {section.count} answers · {section.meanRange}
               </p>
             </button>
@@ -1083,7 +1165,7 @@ function SectionSolutionDialog({ section, items, solution, onClose }: SectionSol
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-2 sm:items-center sm:p-4">
       <button
         type="button"
         aria-label="Close section solution dialog"
@@ -1094,12 +1176,12 @@ function SectionSolutionDialog({ section, items, solution, onClose }: SectionSol
         role="dialog"
         aria-modal="true"
         aria-labelledby="section-solution-title"
-        className="relative z-10 flex max-h-[calc(100svh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+        className="relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-h-[calc(100svh-2rem)] sm:rounded-3xl"
       >
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 p-4 sm:p-6">
-          <div>
-            <p className="text-sm font-black uppercase tracking-wide text-cyan-700">Section Detailed Solution</p>
-            <h2 id="section-solution-title" className="mt-1 text-2xl font-black tracking-tight text-slate-950">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 p-4 sm:gap-4 sm:p-6">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-wide text-cyan-700 sm:text-sm">Section Detailed Solution</p>
+            <h2 id="section-solution-title" className="mt-1 wrap-break-word text-xl font-black tracking-tight text-slate-950 sm:text-2xl">
               {section.sectionTitle}
             </h2>
           </div>
@@ -1114,7 +1196,7 @@ function SectionSolutionDialog({ section, items, solution, onClose }: SectionSol
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-8 sm:p-6 sm:pb-8">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <SummaryCard label="Answers" value={solution.answerCount} />
             <SummaryCard label="Weighted Mean" value={formatNumber(section.weightedMean)} />
             <SummaryCard label="Std. Dev." value={formatNumber(section.standardDeviation)} />
@@ -1135,13 +1217,13 @@ function SectionSolutionDialog({ section, items, solution, onClose }: SectionSol
             </div>
           ) : null}
 
-          <div className="mt-5 grid gap-3">
+          <div className="mt-5 grid min-w-0 gap-3">
             {solution.steps.map((step, index) => (
-              <div key={`${step.label}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm font-black uppercase tracking-wide text-cyan-700">
+              <div key={`${step.label}-${index}`} className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-black uppercase tracking-wide text-cyan-700 wrap-anywhere">
                   Step {index + 1}: {step.label}
                 </p>
-                <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                <div className="mt-3 grid min-w-0 gap-3 lg:grid-cols-3">
                   <SolutionBlock label="Formula" value={step.formula} />
                   <SolutionBlock label="Substitution" value={step.substitution} />
                   <SolutionBlock label="Result" value={step.result} />
@@ -1189,14 +1271,14 @@ function SectionSolutionDialog({ section, items, solution, onClose }: SectionSol
 
 function MethodReferenceCard() {
   return (
-    <section className="rounded-3xl bg-white p-6 shadow-sm">
-      <div className="flex items-start gap-4">
+    <section className="rounded-2xl bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start">
         <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
           <BookOpenCheck className="size-6" />
         </span>
-        <div>
-          <h2 className="text-xl font-black">Statistical and Survey Reference</h2>
-          <p className="mt-2 text-sm leading-7 text-slate-600">
+        <div className="min-w-0">
+          <h2 className="wrap-break-word text-lg font-black sm:text-xl">Statistical and Survey Reference</h2>
+          <p className="mt-2 text-sm leading-7 text-slate-600 wrap-anywhere">
             This statistics page follows an SPSS-inspired descriptive statistics workflow: frequency distribution, mean,
             weighted mean, variance, standard deviation, and interpretation by Likert mean range. ANOVA is an inferential
             method for comparing group means and can be added later when respondent groups need to be tested. The survey
@@ -1216,9 +1298,9 @@ type SummaryCardProps = {
 
 function SummaryCard({ label, value }: SummaryCardProps) {
   return (
-    <div className="rounded-3xl bg-white p-6 shadow-sm">
-      <p className="text-sm font-bold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-3 text-3xl font-black tracking-tight text-slate-950">{value}</p>
+    <div className="min-w-0 rounded-2xl bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500 sm:text-sm">{label}</p>
+      <p className="mt-3 text-2xl font-black tracking-tight text-slate-950 wrap-break-word sm:text-3xl">{value}</p>
     </div>
   )
 }
@@ -1230,9 +1312,9 @@ type ChartCardProps = {
 
 function ChartCard({ title, children }: ChartCardProps) {
   return (
-    <section className="rounded-3xl bg-white p-6 shadow-sm">
-      <h2 className="text-xl font-black">{title}</h2>
-      <div className="mt-4">{children}</div>
+    <section className="min-w-0 overflow-hidden rounded-2xl bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+      <h2 className="wrap-break-word text-lg font-black sm:text-xl">{title}</h2>
+      <div className="mt-4 min-w-0 overflow-hidden">{children}</div>
     </section>
   )
 }
@@ -1244,12 +1326,12 @@ type CalculationSolutionProps = {
 
 function CalculationSolution({ title, children }: CalculationSolutionProps) {
   return (
-    <section className="rounded-3xl bg-white p-6 shadow-sm">
-      <div className="mb-4 flex items-center gap-3">
-        <span className="flex size-10 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
+    <section className="min-w-0 rounded-2xl bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+      <div className="mb-4 flex min-w-0 items-center gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
           <Calculator className="size-5" />
         </span>
-        <h2 className="text-xl font-black">{title}</h2>
+        <h2 className="min-w-0 wrap-break-word text-lg font-black sm:text-xl">{title}</h2>
       </div>
       {children}
     </section>
@@ -1263,7 +1345,7 @@ type SolutionBlockProps = {
 
 function SolutionBlock({ label, value }: SolutionBlockProps) {
   return (
-    <div className="rounded-xl bg-white p-3">
+    <div className="min-w-0 rounded-xl bg-white p-3">
       <p className="text-xs font-black uppercase tracking-wide text-slate-400">{label}</p>
       <p className="mt-2 wrap-break-word text-sm font-bold leading-6 text-slate-700">{value}</p>
     </div>
@@ -1278,15 +1360,15 @@ type GridCardProps = {
 
 function GridCard({ title, rows, children }: GridCardProps) {
   return (
-    <section className="rounded-3xl bg-white p-6 shadow-sm">
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
+    <section className="min-w-0 rounded-2xl bg-white p-4 shadow-sm sm:rounded-3xl sm:p-6">
+      <div className="mb-4 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-700">
             <Table2 className="size-5" />
           </span>
-          <h2 className="text-xl font-black">{title}</h2>
+          <h2 className="min-w-0 wrap-break-word text-lg font-black sm:text-xl">{title}</h2>
         </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600">{rows} rows</span>
+        <span className="inline-flex w-full justify-center rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600 sm:w-auto">{rows} rows</span>
       </div>
       {children}
     </section>

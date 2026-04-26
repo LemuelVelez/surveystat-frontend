@@ -120,12 +120,12 @@ type DialogShellProps = {
 
 function DialogShell({ title, description, children, footer, onClose }: DialogShellProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/80 px-3 py-3 backdrop-blur sm:items-center sm:px-4 sm:py-4" role="dialog" aria-modal="true">
-      <section className="max-h-[95svh] w-full max-w-xs overflow-auto rounded-2xl border border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/60 sm:max-w-4xl sm:rounded-3xl">
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-4 py-4 backdrop-blur sm:gap-4 sm:px-6 sm:py-5">
-          <div className="min-w-0">
-            <h2 className="max-w-xs truncate text-xl font-black tracking-tight sm:max-w-none sm:text-2xl">{title}</h2>
-            {description ? <p className="mt-2 max-w-xs text-sm leading-6 text-slate-300 wrap-anywhere sm:max-w-2xl">{description}</p> : null}
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/80 px-2 py-2 backdrop-blur sm:items-center sm:px-4 sm:py-4" role="dialog" aria-modal="true">
+      <section className="flex max-h-[calc(100svh-1rem)] w-full max-w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/60 sm:max-h-[95svh] sm:max-w-4xl sm:rounded-3xl">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3 py-4 backdrop-blur sm:gap-4 sm:px-6 sm:py-5">
+          <div className="min-w-0 flex-1">
+            <h2 className="max-w-full wrap-break-word text-lg font-black tracking-tight sm:text-2xl">{title}</h2>
+            {description ? <p className="mt-2 max-w-full text-sm leading-6 text-slate-300 wrap-anywhere sm:max-w-2xl">{description}</p> : null}
           </div>
           <button
             type="button"
@@ -136,10 +136,10 @@ function DialogShell({ title, description, children, footer, onClose }: DialogSh
           </button>
         </div>
 
-        <div className="px-4 py-4 sm:px-6 sm:py-6">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-6">{children}</div>
 
         {footer ? (
-          <div className="sticky bottom-0 border-t border-white/10 bg-slate-950/95 px-4 py-4 backdrop-blur sm:px-6 sm:py-5">
+          <div className="shrink-0 border-t border-white/10 bg-slate-950/95 px-3 py-4 backdrop-blur sm:px-6 sm:py-5">
             {footer}
           </div>
         ) : null}
@@ -358,8 +358,8 @@ export function Landing() {
 
   return (
     <main className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-white">
-      <section className="mx-auto flex min-h-screen w-full min-w-0 max-w-7xl flex-col px-2 py-3 sm:px-6 sm:py-8 lg:px-8">
-        <nav className="sticky top-3 z-40 flex min-w-0 items-center justify-between gap-2 rounded-2xl border border-white/10 bg-slate-950/80 px-2 py-2 shadow-2xl shadow-slate-950/30 backdrop-blur sm:top-4 sm:rounded-3xl sm:px-5 sm:py-4">
+      <section className="mx-auto flex min-h-screen w-full min-w-0 max-w-7xl flex-col px-2 pb-3 pt-20 sm:px-6 sm:pb-8 sm:pt-28 lg:px-8">
+        <nav className="fixed inset-x-2 top-3 z-40 mx-auto flex max-w-7xl min-w-0 items-center justify-between gap-2 rounded-2xl border border-white/10 bg-slate-950/90 px-2 py-2 shadow-2xl shadow-slate-950/30 backdrop-blur sm:inset-x-6 sm:top-4 sm:rounded-3xl sm:px-5 sm:py-4 lg:inset-x-8">
           <Link to="/" className="flex min-w-0 items-center gap-2 font-semibold tracking-tight sm:gap-3" onClick={closeMobileNavigation}>
             <span className="flex size-9 shrink-0 items-center justify-center rounded-2xl bg-white p-2 shadow-lg shadow-cyan-400/20 sm:size-12">
               <img src={logoUrl} alt="SurveyStat logo" className="size-full object-contain" />
@@ -423,7 +423,7 @@ export function Landing() {
         </nav>
 
         {isMobileNavigationOpen ? (
-          <div id="landing-mobile-navigation" className="mx-auto mt-3 flex w-full max-w-full min-w-0 flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 sm:mt-4 sm:gap-3 sm:p-3 md:hidden">
+          <div id="landing-mobile-navigation" className="fixed inset-x-2 top-20 z-30 mx-auto flex w-auto max-w-7xl min-w-0 flex-col gap-2 rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-2xl shadow-slate-950/40 backdrop-blur sm:inset-x-6 sm:top-24 sm:gap-3 sm:p-3 lg:inset-x-8 md:hidden">
             <button
               type="button"
               onClick={() => {
@@ -621,26 +621,26 @@ export function Landing() {
           title="Existing Surveys"
           onClose={() => setIsExistingSurveysDialogOpen(false)}
           footer={
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="max-w-xs truncate text-sm font-semibold text-slate-300 sm:max-w-none">
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="max-w-full wrap-break-word text-sm font-semibold text-slate-300">
                 {selectedExistingSurveys.length} selected survey{selectedExistingSurveys.length === 1 ? "" : "s"}
               </p>
-              <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="grid w-full min-w-0 gap-3 sm:w-auto sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => copySurveyShareLink(selectedSurveyCodes)}
-                  className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10 sm:w-auto sm:max-w-none"
+                  className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-white transition hover:bg-white/10 sm:px-5"
                 >
-                  <Copy className="size-4" />
-                  Copy Share Link
+                  <Copy className="size-4 shrink-0" />
+                  <span className="truncate">Copy Share Link</span>
                 </button>
                 <button
                   type="button"
                   onClick={startSelectedSurveys}
-                  className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 sm:w-auto sm:max-w-none"
+                  className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 sm:px-5"
                 >
-                  <ArrowUpRight className="size-4" />
-                  Start Selected
+                  <ArrowUpRight className="size-4 shrink-0" />
+                  <span className="truncate">Start Selected</span>
                 </button>
               </div>
             </div>
@@ -653,30 +653,30 @@ export function Landing() {
                 setExistingSurveyMode("single")
                 setSelectedSurveyCodes((current) => [current[0] ?? forms[0]?.code ?? ""])
               }}
-              className={`rounded-2xl border p-4 text-left transition ${
+              className={`min-w-0 rounded-2xl border p-4 text-left transition ${
                 existingSurveyMode === "single"
                   ? "border-cyan-300 bg-cyan-300/10 text-cyan-50"
                   : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
               }`}
             >
               <ListChecks className="mb-3 size-5" />
-              <p className="font-black">Single survey</p>
+              <p className="wrap-break-word font-black">Single survey</p>
             </button>
             <button
               type="button"
               onClick={() => setExistingSurveyMode("series")}
-              className={`rounded-2xl border p-4 text-left transition ${
+              className={`min-w-0 rounded-2xl border p-4 text-left transition ${
                 existingSurveyMode === "series"
                   ? "border-cyan-300 bg-cyan-300/10 text-cyan-50"
                   : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
               }`}
             >
               <Layers3 className="mb-3 size-5" />
-              <p className="font-black">Survey series</p>
+              <p className="wrap-break-word font-black">Survey series</p>
             </button>
           </div>
 
-          <div className="grid gap-3">
+          <div className="grid min-w-0 gap-3">
             {forms.map((form, index) => {
               const isSelected = selectedSurveyCodes.includes(form.code)
               const isUpdatingRespondentInfo = updatingRespondentInfoFormId === form.id
@@ -684,24 +684,24 @@ export function Landing() {
               return (
                 <div
                   key={form.id}
-                  className={`rounded-2xl border p-4 transition ${
+                  className={`min-w-0 rounded-2xl border p-3 transition sm:p-4 ${
                     isSelected
                       ? "border-cyan-300 bg-cyan-300/10 shadow-lg shadow-cyan-950/20"
                       : "border-white/10 bg-white/5 hover:bg-white/10"
                   }`}
                 >
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <button type="button" onClick={() => toggleExistingSurvey(form.code)} className="min-w-0 flex-1 text-left">
                       <span className="text-xs font-black uppercase tracking-wide text-cyan-200">
                         Survey {form.surveyStepNumber || index + 1}
                       </span>
-                      <span className="mt-1 block max-w-xs truncate text-lg font-black sm:max-w-none">{form.title}</span>
-                      <span className="mt-2 line-clamp-2 block max-w-xs text-sm leading-6 text-slate-400 wrap-anywhere sm:max-w-none">{form.description}</span>
+                      <span className="mt-1 block max-w-full wrap-break-word text-base font-black sm:text-lg">{form.title}</span>
+                      <span className="mt-2 line-clamp-3 block max-w-full text-sm leading-6 text-slate-400 wrap-anywhere sm:line-clamp-2">{form.description}</span>
                     </button>
 
-                    <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end sm:gap-3">
+                    <div className="grid w-full shrink-0 grid-cols-1 gap-2 sm:w-auto sm:items-end sm:gap-3">
                       <span
-                        className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
+                        className={`flex h-9 min-w-0 shrink-0 items-center justify-center rounded-xl px-3 sm:size-9 sm:px-0 ${
                           isSelected ? "bg-cyan-400 text-slate-950" : "bg-white/10 text-slate-500"
                         }`}
                       >
@@ -710,10 +710,10 @@ export function Landing() {
                       <button
                         type="button"
                         onClick={() => copySurveyShareLink([form.code])}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white/10 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-200 transition hover:bg-white/15 hover:text-white sm:w-auto"
+                        className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-full bg-white/10 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-200 transition hover:bg-white/15 hover:text-white sm:w-auto"
                       >
-                        <Link2 className="size-3.5" />
-                        Share
+                        <Link2 className="size-3.5 shrink-0" />
+                        <span className="truncate">Share</span>
                       </button>
                       <button
                         type="button"
@@ -721,12 +721,12 @@ export function Landing() {
                         aria-checked={form.respondentInformationRequired}
                         disabled={isUpdatingRespondentInfo}
                         onClick={() => toggleExistingSurveyRespondentInformation(form)}
-                        className={`inline-flex w-full items-center justify-center gap-3 rounded-full px-3 py-2 text-xs font-black uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto ${
+                        className={`inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-full px-3 py-2 text-xs font-black uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:gap-3 ${
                           form.respondentInformationRequired ? "bg-cyan-400 text-slate-950" : "bg-white/10 text-slate-300"
                         }`}
                       >
                         <span
-                          className={`flex h-5 w-10 items-center rounded-full p-0.5 transition ${
+                          className={`flex h-5 w-10 shrink-0 items-center rounded-full p-0.5 transition ${
                             form.respondentInformationRequired ? "bg-slate-950/20" : "bg-slate-950/60"
                           }`}
                         >
@@ -736,7 +736,7 @@ export function Landing() {
                             }`}
                           />
                         </span>
-                        {isUpdatingRespondentInfo ? "Saving" : form.respondentInformationRequired ? "Required" : "Off"}
+                        <span className="truncate">{isUpdatingRespondentInfo ? "Saving" : form.respondentInformationRequired ? "Required" : "Off"}</span>
                       </button>
                     </div>
                   </div>
@@ -752,15 +752,15 @@ export function Landing() {
           title="Create New Survey"
           onClose={() => setIsCreateSurveyDialogOpen(false)}
           footer={
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="max-w-xs truncate text-sm font-semibold text-slate-300 sm:max-w-none">
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="max-w-full wrap-break-word text-sm font-semibold text-slate-300">
                 {createMode === "series" ? `${surveyStepCount} survey steps will be created.` : "One survey will be created."}
               </p>
               <button
                 type="button"
                 onClick={handleCreateSurveySeries}
                 disabled={isCreatingSurvey}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 sm:w-auto"
               >
                 {isCreatingSurvey ? <Loader2 className="size-4 animate-spin" /> : <FilePlus2 className="size-4" />}
                 Create Survey
@@ -773,51 +773,51 @@ export function Landing() {
               <button
                 type="button"
                 onClick={() => setCreateMode("single")}
-                className={`rounded-2xl border p-4 text-left transition ${
+                className={`min-w-0 rounded-2xl border p-4 text-left transition ${
                   createMode === "single"
                     ? "border-cyan-300 bg-cyan-300/10 text-cyan-50"
                     : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
                 }`}
               >
                 <ListChecks className="mb-3 size-5" />
-                <p className="font-black">Create one survey</p>
+                <p className="wrap-break-word font-black">Create one survey</p>
               </button>
               <button
                 type="button"
                 onClick={() => setCreateMode("series")}
-                className={`rounded-2xl border p-4 text-left transition ${
+                className={`min-w-0 rounded-2xl border p-4 text-left transition ${
                   createMode === "series"
                     ? "border-cyan-300 bg-cyan-300/10 text-cyan-50"
                     : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
                 }`}
               >
                 <Layers3 className="mb-3 size-5" />
-                <p className="font-black">Create survey series</p>
+                <p className="wrap-break-word font-black">Create survey series</p>
               </button>
             </div>
 
-            <label className="block">
+            <label className="block min-w-0">
               <span className="text-sm font-black text-slate-200">Survey Title</span>
               <input
                 value={createSurveyTitle}
                 onChange={(event) => setCreateSurveyTitle(event.target.value)}
-                className="mt-2 w-full max-w-xs rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10 sm:max-w-none"
+                className="mt-2 w-full max-w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10"
                 placeholder="Enter survey title"
               />
             </label>
 
-            <label className="block">
+            <label className="block min-w-0">
               <span className="text-sm font-black text-slate-200">Description</span>
               <textarea
                 value={createSurveyDescription}
                 onChange={(event) => setCreateSurveyDescription(event.target.value)}
-                className="mt-2 min-h-28 w-full max-w-xs resize-y rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10 sm:max-w-none"
+                className="mt-2 min-h-28 w-full max-w-full resize-y rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10"
                 placeholder="Describe the purpose of the survey"
               />
             </label>
 
             {createMode === "series" ? (
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-black text-slate-200">Number of survey steps</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {[2, 3, 4, 5, 6].map((count) => (
@@ -843,17 +843,17 @@ export function Landing() {
               role="switch"
               aria-checked={respondentInformationRequired}
               onClick={() => setRespondentInformationRequired((current) => !current)}
-              className={`flex w-full max-w-xs items-center justify-between gap-4 rounded-2xl border p-4 text-left transition sm:max-w-none ${
+              className={`flex w-full max-w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition ${
                 respondentInformationRequired
                   ? "border-cyan-300 bg-cyan-300/10"
                   : "border-white/10 bg-white/5 hover:bg-white/10"
               }`}
             >
-              <span>
-                <span className="block font-black text-white">Respondent Information</span>
+              <span className="min-w-0">
+                <span className="block wrap-break-word font-black text-white">Respondent Information</span>
               </span>
               <span
-                className={`flex h-8 w-16 items-center rounded-full p-1 transition ${
+                className={`flex h-8 w-16 shrink-0 items-center rounded-full p-1 transition ${
                   respondentInformationRequired ? "bg-cyan-400" : "bg-white/10"
                 }`}
               >
@@ -872,5 +872,3 @@ export function Landing() {
 }
 
 export default Landing
-
-

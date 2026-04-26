@@ -293,8 +293,10 @@ export class SurveyStatApiError extends Error {
   }
 }
 
+type EnvValue = string | boolean | undefined
+
 const ENV = (import.meta as unknown as {
-  env?: Record<string, string | undefined>
+  env?: Record<string, EnvValue>
 }).env
 
 const PROCESS_ENV = (globalThis as unknown as {
@@ -303,22 +305,49 @@ const PROCESS_ENV = (globalThis as unknown as {
   }
 }).process?.env
 
-function getEnvValue(keys: string[]) {
-  for (const key of keys) {
-    const value = ENV?.[key] || PROCESS_ENV?.[key]
+const DEFAULT_LOCAL_SURVEYSTAT_API_URL = "http://localhost:8080"
 
-    if (typeof value === "string" && value.trim()) {
-      return value.trim()
+function getEnvValue(keys: string[]) {
+  const envSources: Array<Record<string, EnvValue> | undefined> = [ENV, PROCESS_ENV]
+
+  for (const key of keys) {
+    for (const envSource of envSources) {
+      const value = envSource?.[key]
+
+      if (typeof value === "string" && value.trim()) {
+        return value.trim()
+      }
     }
   }
 
   return undefined
 }
 
-const ENV_API_URL = getEnvValue(["VITE_SURVEYSTAT_URL", "SurveyStat_URL"])
+function isLocalBrowserHost() {
+  if (typeof window === "undefined") {
+    return false
+  }
+
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)
+}
+
+function isDevelopmentEnvironment() {
+  return ENV?.DEV === true || ENV?.MODE === "development" || PROCESS_ENV?.NODE_ENV === "development"
+}
+
+const ENV_API_URL = getEnvValue([
+  "VITE_SURVEYSTAT_URL",
+  "VITE_SURVEYSTAT_API_URL",
+  "SurveyStat_URL",
+  "SURVEYSTAT_URL",
+])
 const ENV_SYSTEM_URL = getEnvValue(["VITE_ACREDIFY_SYSTEM_URL", "VITE_SYSTEM_URL"])
 
-export const SURVEYSTAT_API_URL = resolveRequiredUrl(ENV_API_URL, "VITE_SURVEYSTAT_URL or SurveyStat_URL")
+export const SURVEYSTAT_API_URL = resolveRequiredUrl(
+  ENV_API_URL,
+  "VITE_SURVEYSTAT_URL or SurveyStat_URL",
+  DEFAULT_LOCAL_SURVEYSTAT_API_URL,
+)
 export const ACREDIFY_SYSTEM_URL = normalizeOptionalUrl(ENV_SYSTEM_URL)
 
 function normalizeBaseUrl(url: string) {
@@ -335,18 +364,24 @@ function normalizeOptionalUrl(url?: string) {
   return normalizeBaseUrl(trimmed)
 }
 
-function resolveRequiredUrl(url: string | undefined, envName: string) {
+function resolveRequiredUrl(url: string | undefined, envName: string, localFallbackUrl?: string) {
   const normalizedUrl = normalizeOptionalUrl(url)
 
-  if (!normalizedUrl) {
-    throw new SurveyStatApiError(
-      `${envName} is not configured.`,
-      500,
-      { envName },
-    )
+  if (normalizedUrl) {
+    return normalizedUrl
   }
 
-  return normalizedUrl
+  const normalizedLocalFallbackUrl = normalizeOptionalUrl(localFallbackUrl)
+
+  if (normalizedLocalFallbackUrl && (isDevelopmentEnvironment() || isLocalBrowserHost())) {
+    return normalizedLocalFallbackUrl
+  }
+
+  throw new SurveyStatApiError(
+    `${envName} is not configured.`,
+    500,
+    { envName },
+  )
 }
 
 function normalizePath(path: string) {
