@@ -79,6 +79,21 @@ type PlotlyChartProps = {
 
 type PlotlyComponent = ComponentType<PlotlyChartProps>
 
+const cartesianPlotlyConfig: Record<string, unknown> = {
+  responsive: true,
+  displayModeBar: true,
+  displaylogo: false,
+  scrollZoom: true,
+  modeBarButtonsToAdd: ["zoomOut2d", "resetScale2d"],
+  modeBarButtonsToRemove: ["select2d", "lasso2d"],
+}
+
+const piePlotlyConfig: Record<string, unknown> = {
+  responsive: true,
+  displayModeBar: true,
+  displaylogo: false,
+}
+
 let plotlyComponentPromise: Promise<PlotlyComponent> | null = null
 
 const defaultSummary: StatisticsSummary = {
@@ -920,7 +935,7 @@ export function Statistic() {
                     yaxis: { title: { text: "Count" }, rangemode: "tozero" },
                     margin: { l: 42, r: 12, t: 50, b: 50 },
                   }}
-                  config={{ responsive: true, displayModeBar: false }}
+                  config={cartesianPlotlyConfig}
                   useResizeHandler
                   className="h-80 w-full sm:h-96"
                   style={{ width: "100%", height: "100%" }}
@@ -943,7 +958,7 @@ export function Statistic() {
                     margin: { l: 12, r: 12, t: 50, b: 20 },
                     showlegend: true,
                   }}
-                  config={{ responsive: true, displayModeBar: false }}
+                  config={piePlotlyConfig}
                   useResizeHandler
                   className="h-80 w-full sm:h-96"
                   style={{ width: "100%", height: "100%" }}
