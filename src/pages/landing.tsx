@@ -233,6 +233,10 @@ export function Landing() {
     () => forms.filter((form) => selectedSurveyCodes.includes(form.code)),
     [forms, selectedSurveyCodes],
   )
+  const selectedExistingSurveyCodes = useMemo(
+    () => selectedExistingSurveys.map((form) => form.code),
+    [selectedExistingSurveys],
+  )
 
   function openExistingSurveysDialog() {
     setSelectedSurveyCodes((current) => (current.length > 0 ? current : forms[0]?.code ? [forms[0].code] : []))
@@ -288,7 +292,7 @@ export function Landing() {
   }
 
   function startSelectedSurveys() {
-    const codes = selectedSurveyCodes.length > 0 ? selectedSurveyCodes : forms[0]?.code ? [forms[0].code] : []
+    const codes = selectedExistingSurveyCodes.length > 0 ? selectedExistingSurveyCodes : forms[0]?.code ? [forms[0].code] : []
 
     if (codes.length === 0) {
       toast.error("No active survey is available.")
@@ -628,7 +632,7 @@ export function Landing() {
               <div className="grid w-full min-w-0 gap-3 sm:w-auto sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={() => copySurveyShareLink(selectedSurveyCodes)}
+                  onClick={() => copySurveyShareLink(selectedExistingSurveyCodes)}
                   className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-white transition hover:bg-white/10 sm:px-5"
                 >
                   <Copy className="size-4 shrink-0" />

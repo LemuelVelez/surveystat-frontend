@@ -247,6 +247,26 @@ export function Survey() {
   const respondentInformationRequired = currentQuestionnaire?.respondentInformationRequired ?? true
   const respondentInformationComplete = hasRequiredRespondentInformation(currentDraft.respondent)
   const completedCount = questionnaires.filter((questionnaire) => drafts[questionnaire.code]?.isSubmitted).length
+  const surveyCount = questionnaires.length
+  const hasMultipleSurveys = surveyCount > 1
+  const surveyFlowInstruction = hasMultipleSurveys
+    ? `Complete the ${surveyCount} selected surveys in order. Each survey is submitted before moving forward.`
+    : "Complete the selected survey and submit it once finished."
+  const submittedSurveyLabel = hasMultipleSurveys
+    ? `${completedCount}/${surveyCount} surveys submitted`
+    : currentDraft.isSubmitted
+      ? "Survey submitted"
+      : surveyCount === 1
+        ? "1 survey selected"
+        : "No survey selected"
+  const currentSurveyPositionLabel = hasMultipleSurveys
+    ? `Survey ${currentSurveyIndex + 1} of ${surveyCount}`
+    : "Selected Survey"
+  const submitButtonLabel = hasMultipleSurveys
+    ? currentSurveyIndex < surveyCount - 1
+      ? "Submit Survey and Continue"
+      : "Submit Final Survey"
+    : "Submit Survey"
   const missingRequiredItemIdSet = useMemo(() => new Set(missingRequiredItemIds), [missingRequiredItemIds])
 
   useEffect(() => {
@@ -487,11 +507,11 @@ export function Survey() {
         isSubmitted: true,
       }))
 
-      if (currentSurveyIndex < questionnaires.length - 1) {
+      if (currentSurveyIndex < surveyCount - 1) {
         toast.success(`Survey ${currentSurveyIndex + 1} submitted. Continue to Survey ${currentSurveyIndex + 2}.`)
         setCurrentSurveyIndex((current) => current + 1)
       } else {
-        toast.success("Survey response series submitted successfully.")
+        toast.success(hasMultipleSurveys ? "Survey response series submitted successfully." : "Survey response submitted successfully.")
         navigate("/survey/thank-you", { replace: true })
       }
     } catch (error) {
@@ -517,7 +537,7 @@ export function Survey() {
               <div className="min-w-0">
                 <h1 className="max-w-xs truncate text-2xl font-black tracking-tight sm:max-w-none sm:text-3xl md:text-4xl">Survey Checklist</h1>
                 <p className="mt-2 max-w-xs text-sm leading-6 text-slate-300 wrap-anywhere sm:max-w-3xl">
-                  Complete Survey 1, Survey 2, and the next surveys in order. Each survey is submitted before moving forward.
+                  {surveyFlowInstruction}
                 </p>
               </div>
             </div>
@@ -525,7 +545,7 @@ export function Survey() {
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="max-w-xs truncate rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-slate-100 sm:max-w-none">
-              {completedCount}/{questionnaires.length || 0} surveys submitted
+              {submittedSurveyLabel}
             </div>
             <button
               type="button"
@@ -555,6 +575,7 @@ export function Survey() {
                 <SurveyStepCard
                   key={questionnaire.id}
                   step={index + 1}
+                  stepLabel={hasMultipleSurveys ? `Survey ${index + 1}` : "Selected Survey"}
                   title={questionnaire.title}
                   isActive={currentSurveyIndex === index}
                   isComplete={Boolean(drafts[questionnaire.code]?.isSubmitted)}
@@ -568,10 +589,14 @@ export function Survey() {
               )
             })
           ) : (
-            <>
-              <SurveyStepCard step={1} title="Survey 1" isActive isComplete={false} onClick={() => undefined} />
-              <SurveyStepCard step={2} title="Survey 2" isActive={false} isComplete={false} onClick={() => undefined} />
-            </>
+            <SurveyStepCard
+              step={1}
+              stepLabel="Selected Survey"
+              title={isLoading || isQuestionnaireLoading ? "Loading selected survey" : "Survey"}
+              isActive
+              isComplete={false}
+              onClick={() => undefined}
+            />
           )}
         </div>
 
@@ -597,7 +622,7 @@ export function Survey() {
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                       <p className="max-w-xs truncate text-sm font-bold uppercase tracking-wide text-cyan-700 sm:max-w-none">
-                        Survey {currentSurveyIndex + 1} of {questionnaires.length} · {currentQuestionnaire.code}
+                        {currentSurveyPositionLabel} · {currentQuestionnaire.code}
                       </p>
                       <h2 className="mt-2 max-w-xs text-2xl font-black tracking-tight wrap-anywhere sm:max-w-none sm:text-3xl">{currentQuestionnaire.title}</h2>
                       <p className="mt-3 max-w-xs text-sm leading-7 text-slate-600 wrap-anywhere sm:max-w-3xl">{currentQuestionnaire.description}</p>
@@ -608,30 +633,32 @@ export function Survey() {
                       ) : null}
                     </div>
 
-                    <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-                      <button
-                        type="button"
-                        onClick={() => setCurrentSurveyIndex((current) => Math.max(current - 1, 0))}
-                        disabled={currentSurveyIndex === 0}
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                      >
-                        <ChevronLeft className="size-4" />
-                        Previous Survey
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (currentDraft.isSubmitted) {
-                            setCurrentSurveyIndex((current) => Math.min(current + 1, questionnaires.length - 1))
-                          }
-                        }}
-                        disabled={currentSurveyIndex === questionnaires.length - 1 || !currentDraft.isSubmitted}
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                      >
-                        Next Survey
-                        <ChevronRight className="size-4" />
-                      </button>
-                    </div>
+                    {hasMultipleSurveys ? (
+                      <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+                        <button
+                          type="button"
+                          onClick={() => setCurrentSurveyIndex((current) => Math.max(current - 1, 0))}
+                          disabled={currentSurveyIndex === 0}
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        >
+                          <ChevronLeft className="size-4" />
+                          Previous Survey
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (currentDraft.isSubmitted) {
+                              setCurrentSurveyIndex((current) => Math.min(current + 1, surveyCount - 1))
+                            }
+                          }}
+                          disabled={currentSurveyIndex === surveyCount - 1 || !currentDraft.isSubmitted}
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        >
+                          Next Survey
+                          <ChevronRight className="size-4" />
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
@@ -856,7 +883,7 @@ export function Survey() {
                     className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-4 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300 sm:px-6"
                   >
                     {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                    {currentSurveyIndex < questionnaires.length - 1 ? "Submit Survey and Continue" : "Submit Final Survey"}
+                    {submitButtonLabel}
                   </button>
                 </div>
               ) : (
@@ -1191,6 +1218,7 @@ function SignatureModeButton({ label, icon, isActive, onClick }: SignatureModeBu
 
 type SurveyStepCardProps = {
   step: number
+  stepLabel?: string
   title: string
   isActive: boolean
   isComplete: boolean
@@ -1198,7 +1226,7 @@ type SurveyStepCardProps = {
   onClick: () => void
 }
 
-function SurveyStepCard({ step, title, isActive, isComplete, isLocked = false, onClick }: SurveyStepCardProps) {
+function SurveyStepCard({ step, stepLabel, title, isActive, isComplete, isLocked = false, onClick }: SurveyStepCardProps) {
   return (
     <button
       type="button"
@@ -1217,7 +1245,7 @@ function SurveyStepCard({ step, title, isActive, isComplete, isLocked = false, o
           {isComplete ? <CheckCircle2 className="size-5" /> : step}
         </span>
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Survey {step}</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{stepLabel ?? `Survey ${step}`}</p>
           <p className="line-clamp-2 font-black text-slate-950 wrap-anywhere">{title}</p>
         </div>
       </div>
