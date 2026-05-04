@@ -17,6 +17,7 @@ export type LikertScaleOption = {
 }
 
 export type SurveyFormCode = string
+export type ResponseSourceFilter = "all" | "online" | "hardcopy"
 
 export type SurveyForm = {
   id: string
@@ -165,6 +166,13 @@ export type DescriptiveCalculation = {
   steps: DescriptiveCalculationStep[]
 }
 
+export type StatisticsSourceBreakdown = {
+  onlineResponseCount: number
+  hardcopyResponseCount: number
+  onlineAnswerCount: number
+  hardcopyAnswerCount: number
+}
+
 export type DescriptiveStatistics = {
   count: number
   mean: number
@@ -177,6 +185,7 @@ export type DescriptiveStatistics = {
   distribution: RatingDistribution
   interpretation: string
   meanRange: string
+  sourceBreakdown?: StatisticsSourceBreakdown
   calculation?: DescriptiveCalculation
 }
 
@@ -270,6 +279,41 @@ export type StatisticsFilters = {
   itemId?: string
   submittedFrom?: string
   submittedTo?: string
+  responseSource?: ResponseSourceFilter
+}
+
+export type ManualHardcopySurveyItemCounts = {
+  itemId: string
+  counts: Partial<Record<LikertValue, number>>
+}
+
+export type CreateManualHardcopySurveyStatisticsPayload = {
+  formId?: string
+  formCode?: SurveyFormCode
+  batchLabel?: string | null
+  hardcopyResponseCount?: number | null
+  encodedBy?: string | null
+  notes?: string | null
+  ratingCounts: ManualHardcopySurveyItemCounts[]
+}
+
+export type ManualHardcopySurveyStatisticsResult = {
+  batch: {
+    id: string
+    formId: string
+    batchLabel: string
+    hardcopyResponseCount: number
+    encodedBy?: string | null
+    notes?: string | null
+    encodedAt?: string | Date
+  }
+  itemCount: number
+  answerCount: number
+  ratingCounts: Array<{
+    itemId: string
+    rating: LikertValue
+    responseCount: number
+  }>
 }
 
 export type SurveyResponseFilters = {
@@ -689,4 +733,7 @@ export const surveyStatService = {
 
   getItemStatistics: (filters: StatisticsFilters = {}) =>
     surveystatApi.get<SurveyItemStatistics[]>(`/statistics/items${buildQueryString(filters)}`),
+
+  createManualHardcopyStatistics: (payload: CreateManualHardcopySurveyStatisticsPayload) =>
+    surveystatApi.post<ManualHardcopySurveyStatisticsResult>("/statistics/manual-hardcopy", payload),
 }

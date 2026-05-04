@@ -7,9 +7,11 @@ import {
   BookOpenCheck,
   Calculator,
   CheckCircle2,
+  ClipboardList,
   Eye,
   Loader2,
   RefreshCcw,
+  Save,
   Table2,
   X,
 } from "lucide-react"
@@ -22,11 +24,14 @@ import "ag-grid-community/styles/ag-theme-quartz.css"
 import {
   SurveyStatApiError,
   surveyStatService,
+  type CreateManualHardcopySurveyStatisticsPayload,
   type LikertValue,
+  type ResponseSourceFilter,
   type StatisticsFilters,
   type StatisticsSummary,
   type SurveyForm,
   type SurveyFormStatistics,
+  type SurveyQuestionnaireForm,
   type SurveyItemStatistics,
   type SurveyResponseSummary,
   type SurveySectionStatistics,
@@ -115,6 +120,12 @@ const defaultSummary: StatisticsSummary = {
     4: 0,
     5: 0,
   },
+  sourceBreakdown: {
+    onlineResponseCount: 0,
+    hardcopyResponseCount: 0,
+    onlineAnswerCount: 0,
+    hardcopyAnswerCount: 0,
+  },
   interpretation: "No data",
   meanRange: "N/A",
 }
@@ -134,8 +145,8 @@ function toDistributionData(distribution: Record<LikertValue, number>): Distribu
   }))
 }
 
-function getFormFilterValue(formCode: string): StatisticsFilters {
-  return formCode ? { formCode } : {}
+function getFormFilterValue(formCode: string, responseSource: ResponseSourceFilter): StatisticsFilters {
+  return formCode ? { formCode, responseSource } : {}
 }
 
 function getSelectedFormTitle(forms: SurveyForm[], formCode: string) {
@@ -215,6 +226,89 @@ function createEmptyLikertDistribution(): LikertDistribution {
     3: 0,
     4: 0,
     5: 0,
+  }
+}
+
+function createEmptyManualItemCounts(): Record<LikertValue, string> {
+  return {
+    1: "",
+    2: "",
+    3: "",
+    4: "",
+    5: "",
+  }
+}
+
+function getDefaultSourceBreakdown(summary: StatisticsSummary) {
+  return summary.sourceBreakdown ?? {
+    onlineResponseCount: summary.responseCount,
+    hardcopyResponseCount: 0,
+    onlineAnswerCount: summary.answerCount,
+    hardcopyAnswerCount: 0,
+  }
+}
+
+function getSourceLabel(responseSource: ResponseSourceFilter) {
+  if (responseSource === "online") {
+    return "Online Only"
+  }
+
+  if (responseSource === "hardcopy") {
+    return "Hardcopy Only"
+  }
+
+  return "Online + Hardcopy"
+}
+
+function getManualCountValue(
+  counts: Record<string, Record<LikertValue, string>>,
+  itemId: string,
+  rating: LikertValue,
+) {
+  return counts[itemId]?.[rating] ?? ""
+}
+
+function getQuestionnaireItems(questionnaire: SurveyQuestionnaireForm | null) {
+  return questionnaire?.sections.flatMap((section) =>
+    section.items.map((item) => ({
+      ...item,
+      sectionTitle: section.title,
+    })),
+  ) ?? []
+}
+
+function hasManualCounts(counts: Record<string, Record<LikertValue, string>>) {
+  return Object.values(counts).some((itemCounts) =>
+    ([1, 2, 3, 4, 5] as LikertValue[]).some((rating) => Number(itemCounts[rating] || 0) > 0),
+  )
+}
+
+function buildManualHardcopyPayload(
+  formCode: string,
+  batchLabel: string,
+  hardcopyResponseCount: string,
+  notes: string,
+  counts: Record<string, Record<LikertValue, string>>,
+): CreateManualHardcopySurveyStatisticsPayload {
+  return {
+    formCode,
+    batchLabel: batchLabel.trim() || "Hardcopy Survey Batch",
+    hardcopyResponseCount: hardcopyResponseCount ? Number(hardcopyResponseCount) : null,
+    notes: notes.trim() || null,
+    ratingCounts: Object.entries(counts)
+      .map(([itemId, itemCounts]) => ({
+        itemId,
+        counts: ([1, 2, 3, 4, 5] as LikertValue[]).reduce<Partial<Record<LikertValue, number>>>((nextCounts, rating) => {
+          const count = Number(itemCounts[rating] || 0)
+
+          if (Number.isFinite(count) && count > 0) {
+            nextCounts[rating] = Math.floor(count)
+          }
+
+          return nextCounts
+        }, {}),
+      }))
+      .filter((item) => Object.keys(item.counts).length > 0),
   }
 }
 
@@ -559,13 +653,22 @@ function GridViewport({ children }: { children: ReactNode }) {
 export function Statistic() {
   const [forms, setForms] = useState<SurveyForm[]>([])
   const [selectedFormCode, setSelectedFormCode] = useState("")
+  const [selectedResponseSource, setSelectedResponseSource] = useState<ResponseSourceFilter>("all")
   const [summary, setSummary] = useState<StatisticsSummary>(defaultSummary)
   const [formStatistics, setFormStatistics] = useState<SurveyFormStatistics[]>([])
   const [surveyResponses, setSurveyResponses] = useState<SurveyResponseSummary[]>([])
   const [sectionStatistics, setSectionStatistics] = useState<SurveySectionStatistics[]>([])
   const [itemStatistics, setItemStatistics] = useState<SurveyItemStatistics[]>([])
+  const [manualQuestionnaire, setManualQuestionnaire] = useState<SurveyQuestionnaireForm | null>(null)
+  const [manualCounts, setManualCounts] = useState<Record<string, Record<LikertValue, string>>>({})
+  const [manualBatchLabel, setManualBatchLabel] = useState("Hardcopy Survey Batch")
+  const [manualHardcopyResponseCount, setManualHardcopyResponseCount] = useState("")
+  const [manualNotes, setManualNotes] = useState("")
   const [isFormsLoading, setIsFormsLoading] = useState(true)
   const [isComputing, setIsComputing] = useState(false)
+  const [isManualOpen, setIsManualOpen] = useState(false)
+  const [isManualLoading, setIsManualLoading] = useState(false)
+  const [isManualSaving, setIsManualSaving] = useState(false)
   const [hasComputed, setHasComputed] = useState(false)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [selectedSection, setSelectedSection] = useState<SurveySectionStatistics | null>(null)
@@ -575,9 +678,12 @@ export function Statistic() {
   const formChartLabels = useMemo(() => formStatistics.map((item) => item.formTitle), [formStatistics])
   const formChartMeans = useMemo(() => formStatistics.map((item) => item.weightedMean), [formStatistics])
   const selectedFormTitle = useMemo(() => getSelectedFormTitle(forms, selectedFormCode), [forms, selectedFormCode])
-  const totalResponseCount = Math.max(summary.responseCount, surveyResponses.length)
+  const sourceBreakdown = useMemo(() => getDefaultSourceBreakdown(summary), [summary])
+  const selectedSourceLabel = getSourceLabel(selectedResponseSource)
+  const totalResponseCount = summary.responseCount || Math.max(surveyResponses.length, sourceBreakdown.onlineResponseCount + sourceBreakdown.hardcopyResponseCount)
   const respondentCount = new Set(surveyResponses.map(getRespondentKey)).size
-  const totalRespondentCount = respondentCount || totalResponseCount
+  const totalRespondentCount = selectedResponseSource === "hardcopy" ? totalResponseCount : respondentCount || totalResponseCount
+  const manualQuestionnaireItems = useMemo(() => getQuestionnaireItems(manualQuestionnaire), [manualQuestionnaire])
   const overallResultNarrative = getOverallResultNarrative(
     summary,
     selectedFormTitle,
@@ -615,7 +721,10 @@ export function Statistic() {
   const statisticsPreviewSummary = useMemo<PreviewSummaryItem[]>(
     () => [
       { label: "Survey", value: selectedFormTitle },
+      { label: "Source", value: selectedSourceLabel },
       { label: "Responses", value: totalResponseCount },
+      { label: "Online Responses", value: sourceBreakdown.onlineResponseCount },
+      { label: "Hardcopy Responses", value: sourceBreakdown.hardcopyResponseCount },
       { label: "Respondents", value: totalRespondentCount },
       { label: "Answer Count", value: summary.answerCount },
       { label: "Weighted Mean", value: formatNumber(summary.weightedMean) },
@@ -624,7 +733,7 @@ export function Statistic() {
       { label: "Interpretation", value: summary.interpretation },
       { label: "Mean Range", value: summary.meanRange },
     ],
-    [selectedFormTitle, summary, totalRespondentCount, totalResponseCount],
+    [selectedFormTitle, selectedSourceLabel, sourceBreakdown, summary, totalRespondentCount, totalResponseCount],
   )
 
   const calculationPreviewRows = useMemo<StatisticsPreviewRow[]>(
@@ -715,7 +824,7 @@ export function Statistic() {
     }
   }
 
-  async function loadStatistics(formCode = selectedFormCode) {
+  async function loadStatistics(formCode = selectedFormCode, responseSource = selectedResponseSource) {
     if (!formCode) {
       toast.error("Please select a survey before computing statistics.")
       return
@@ -726,17 +835,19 @@ export function Statistic() {
 
     try {
       setSelectedSection(null)
-      const nextFilters = getFormFilterValue(formCode)
+      const nextFilters = getFormFilterValue(formCode, responseSource)
       const [summaryData, formData, sectionData, itemData, responseData] = await Promise.all([
         surveyStatService.getStatisticsSummary(nextFilters),
         surveyStatService.getFormStatistics(nextFilters),
         surveyStatService.getSectionStatistics(nextFilters),
         surveyStatService.getItemStatistics(nextFilters),
-        surveyStatService.listSurveyResponses({
-          formCode,
-          submittedOnly: true,
-          limit: 1000,
-        }),
+        responseSource === "hardcopy"
+          ? Promise.resolve([] as SurveyResponseSummary[])
+          : surveyStatService.listSurveyResponses({
+              formCode,
+              submittedOnly: true,
+              limit: 1000,
+            }),
       ])
 
       setSummary(summaryData)
@@ -754,8 +865,7 @@ export function Statistic() {
     }
   }
 
-  function selectSurvey(formCode: string) {
-    setSelectedFormCode(formCode)
+  function resetComputedStatistics() {
     setHasComputed(false)
     setSummary(defaultSummary)
     setFormStatistics([])
@@ -763,6 +873,99 @@ export function Statistic() {
     setSectionStatistics([])
     setItemStatistics([])
     setSelectedSection(null)
+  }
+
+  function resetManualEntry() {
+    setManualQuestionnaire(null)
+    setManualCounts({})
+    setManualBatchLabel("Hardcopy Survey Batch")
+    setManualHardcopyResponseCount("")
+    setManualNotes("")
+  }
+
+  function selectSurvey(formCode: string) {
+    setSelectedFormCode(formCode)
+    resetComputedStatistics()
+    resetManualEntry()
+  }
+
+  function selectResponseSource(responseSource: ResponseSourceFilter) {
+    setSelectedResponseSource(responseSource)
+    resetComputedStatistics()
+  }
+
+  async function openManualEntry() {
+    if (!selectedFormCode) {
+      toast.error("Please select a survey before adding hardcopy results.")
+      return
+    }
+
+    setIsManualOpen(true)
+
+    if (manualQuestionnaire?.code === selectedFormCode) {
+      return
+    }
+
+    setIsManualLoading(true)
+
+    try {
+      const questionnaire = await surveyStatService.getQuestionnaireByFormCode(selectedFormCode)
+      setManualQuestionnaire(questionnaire)
+      setManualCounts(
+        getQuestionnaireItems(questionnaire).reduce<Record<string, Record<LikertValue, string>>>((nextCounts, item) => {
+          nextCounts[item.id] = createEmptyManualItemCounts()
+          return nextCounts
+        }, {}),
+      )
+    } catch (error) {
+      const message = getErrorMessage(error)
+      toast.error(message)
+      setIsManualOpen(false)
+    } finally {
+      setIsManualLoading(false)
+    }
+  }
+
+  function updateManualCount(itemId: string, rating: LikertValue, value: string) {
+    const sanitizedValue = value.replace(/[^0-9]/g, "")
+
+    setManualCounts((currentCounts) => ({
+      ...currentCounts,
+      [itemId]: {
+        ...(currentCounts[itemId] ?? createEmptyManualItemCounts()),
+        [rating]: sanitizedValue,
+      },
+    }))
+  }
+
+  async function submitManualHardcopyResults() {
+    if (!selectedFormCode || !hasManualCounts(manualCounts)) {
+      toast.error("Add at least one hardcopy count before saving.")
+      return
+    }
+
+    setIsManualSaving(true)
+
+    try {
+      await surveyStatService.createManualHardcopyStatistics(
+        buildManualHardcopyPayload(
+          selectedFormCode,
+          manualBatchLabel,
+          manualHardcopyResponseCount,
+          manualNotes,
+          manualCounts,
+        ),
+      )
+      toast.success("Hardcopy survey results were added to the selected survey statistics.")
+      setIsManualOpen(false)
+      resetManualEntry()
+      await loadStatistics(selectedFormCode, "all")
+      setSelectedResponseSource("all")
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setIsManualSaving(false)
+    }
   }
 
   useEffect(() => {
@@ -786,7 +989,7 @@ export function Statistic() {
                 <div className="min-w-0">
                   <h1 className="wrap-break-word text-2xl font-black tracking-tight sm:text-3xl md:text-4xl">Survey Statistics</h1>
                   <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300 wrap-anywhere">
-                    Select one survey first, then compute descriptive statistics with a detailed weighted-mean solution.
+                    Select one survey first, then compute combined online and hardcopy descriptive statistics with a detailed weighted-mean solution.
                   </p>
                 </div>
               </div>
@@ -796,11 +999,20 @@ export function Statistic() {
               <button
                 type="button"
                 disabled={!selectedFormCode || isComputing}
-                onClick={() => loadStatistics(selectedFormCode)}
+                onClick={() => loadStatistics(selectedFormCode, selectedResponseSource)}
                 className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 sm:px-5"
               >
                 {isComputing ? <Loader2 className="size-4 animate-spin" /> : <Calculator className="size-4 shrink-0" />}
                 <span className="truncate">Compute Selected Survey</span>
+              </button>
+              <button
+                type="button"
+                disabled={!selectedFormCode || isManualLoading || isManualSaving}
+                onClick={openManualEntry}
+                className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-cyan-300/40 bg-cyan-300/10 px-4 py-3 text-sm font-bold text-cyan-100 transition hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300 sm:px-5"
+              >
+                {isManualLoading ? <Loader2 className="size-4 animate-spin" /> : <ClipboardList className="size-4 shrink-0" />}
+                <span className="truncate">Add Hardcopy Results</span>
               </button>
               <button
                 type="button"
@@ -813,7 +1025,7 @@ export function Statistic() {
               </button>
               <button
                 type="button"
-                onClick={() => (hasComputed ? loadStatistics(selectedFormCode) : loadForms())}
+                onClick={() => (hasComputed ? loadStatistics(selectedFormCode, selectedResponseSource) : loadForms())}
                 className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10 sm:col-span-2 sm:px-5 xl:col-span-1"
               >
                 <RefreshCcw className="size-4 shrink-0" />
@@ -834,12 +1046,33 @@ export function Statistic() {
             <div className="min-w-0">
               <h2 className="wrap-break-word text-lg font-black sm:text-xl">Choose Survey to Compute</h2>
               <p className="mt-1 text-sm leading-6 text-slate-500 wrap-anywhere">
-                Statistics are computed only after selecting a specific survey form.
+                Statistics can include online responses, encoded hardcopy forms, or both for the same selected survey.
               </p>
             </div>
             <span className="max-w-full rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600 wrap-anywhere sm:max-w-sm">
               {selectedFormCode ? selectedFormTitle : "No survey selected"}
             </span>
+          </div>
+
+          <div className="mb-4 grid gap-2 sm:grid-cols-3">
+            {(["all", "online", "hardcopy"] as ResponseSourceFilter[]).map((responseSource) => {
+              const isSelected = selectedResponseSource === responseSource
+
+              return (
+                <button
+                  key={responseSource}
+                  type="button"
+                  onClick={() => selectResponseSource(responseSource)}
+                  className={`rounded-2xl border px-4 py-3 text-sm font-black transition ${
+                    isSelected
+                      ? "border-cyan-400 bg-cyan-50 text-cyan-700"
+                      : "border-slate-200 bg-slate-50 text-slate-600 hover:border-cyan-200 hover:bg-cyan-50"
+                  }`}
+                >
+                  {getSourceLabel(responseSource)}
+                </button>
+              )
+            })}
           </div>
 
           {isFormsLoading ? (
@@ -902,9 +1135,10 @@ export function Statistic() {
           <div className="min-w-0 space-y-6">
             <MethodReferenceCard />
 
-            <section className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <section className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-6">
               <SummaryCard label="Responses" value={totalResponseCount} />
-              <SummaryCard label="Respondents" value={totalRespondentCount} />
+              <SummaryCard label="Online" value={sourceBreakdown.onlineResponseCount} />
+              <SummaryCard label="Hardcopy" value={sourceBreakdown.hardcopyResponseCount} />
               <SummaryCard label="Answer Count" value={summary.answerCount} />
               <SummaryCard label="Weighted Mean" value={summary.weightedMean.toFixed(2)} />
               <SummaryCard label="Interpretation" value={summary.interpretation} />
@@ -1066,6 +1300,24 @@ export function Statistic() {
         </div>
       </Preview>
 
+      <ManualHardcopyEntryDialog
+        isOpen={isManualOpen}
+        selectedFormTitle={selectedFormTitle}
+        items={manualQuestionnaireItems}
+        counts={manualCounts}
+        batchLabel={manualBatchLabel}
+        hardcopyResponseCount={manualHardcopyResponseCount}
+        notes={manualNotes}
+        isLoading={isManualLoading}
+        isSaving={isManualSaving}
+        onBatchLabelChange={setManualBatchLabel}
+        onHardcopyResponseCountChange={(value) => setManualHardcopyResponseCount(value.replace(/[^0-9]/g, ""))}
+        onNotesChange={setManualNotes}
+        onCountChange={updateManualCount}
+        onSubmit={submitManualHardcopyResults}
+        onClose={() => setIsManualOpen(false)}
+      />
+
       <SectionSolutionDialog
         section={selectedSection}
         items={selectedSectionItems}
@@ -1073,6 +1325,202 @@ export function Statistic() {
         onClose={() => setSelectedSection(null)}
       />
     </main>
+  )
+}
+
+type ManualHardcopyEntryItem = ReturnType<typeof getQuestionnaireItems>[number]
+
+type ManualHardcopyEntryDialogProps = {
+  isOpen: boolean
+  selectedFormTitle: string
+  items: ManualHardcopyEntryItem[]
+  counts: Record<string, Record<LikertValue, string>>
+  batchLabel: string
+  hardcopyResponseCount: string
+  notes: string
+  isLoading: boolean
+  isSaving: boolean
+  onBatchLabelChange: (value: string) => void
+  onHardcopyResponseCountChange: (value: string) => void
+  onNotesChange: (value: string) => void
+  onCountChange: (itemId: string, rating: LikertValue, value: string) => void
+  onSubmit: () => void
+  onClose: () => void
+}
+
+function ManualHardcopyEntryDialog({
+  isOpen,
+  selectedFormTitle,
+  items,
+  counts,
+  batchLabel,
+  hardcopyResponseCount,
+  notes,
+  isLoading,
+  isSaving,
+  onBatchLabelChange,
+  onHardcopyResponseCountChange,
+  onNotesChange,
+  onCountChange,
+  onSubmit,
+  onClose,
+}: ManualHardcopyEntryDialogProps) {
+  useEffect(() => {
+    if (!isOpen) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [isOpen, onClose])
+
+  if (!isOpen) {
+    return null
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-2 sm:items-center sm:p-4">
+      <button
+        type="button"
+        aria-label="Close hardcopy entry dialog"
+        className="absolute inset-0 bg-slate-950/70"
+        onClick={onClose}
+      />
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="hardcopy-entry-title"
+        className="relative z-10 flex max-h-[calc(100svh-1rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-h-[calc(100svh-2rem)] sm:rounded-3xl"
+      >
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 p-4 sm:gap-4 sm:p-6">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-wide text-cyan-700 sm:text-sm">Manual Hardcopy Results</p>
+            <h2 id="hardcopy-entry-title" className="mt-1 wrap-break-word text-xl font-black tracking-tight text-slate-950 sm:text-2xl">
+              {selectedFormTitle}
+            </h2>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500 wrap-anywhere">
+              Encode the paper checklist frequency counts per item. These hardcopy counts will be calculated together with online responses for the same survey.
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+            className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600 transition hover:bg-slate-200 hover:text-slate-950"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-8 sm:p-6 sm:pb-8">
+          <div className="grid gap-3 lg:grid-cols-3">
+            <label className="grid gap-2 text-sm font-bold text-slate-700">
+              Batch Label
+              <input
+                value={batchLabel}
+                onChange={(event) => onBatchLabelChange(event.target.value)}
+                className="min-w-0 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                placeholder="Hardcopy Survey Batch"
+              />
+            </label>
+            <label className="grid gap-2 text-sm font-bold text-slate-700">
+              Number of Hardcopy Respondents
+              <input
+                value={hardcopyResponseCount}
+                onChange={(event) => onHardcopyResponseCountChange(event.target.value)}
+                inputMode="numeric"
+                className="min-w-0 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                placeholder="Optional"
+              />
+            </label>
+            <label className="grid gap-2 text-sm font-bold text-slate-700">
+              Notes
+              <input
+                value={notes}
+                onChange={(event) => onNotesChange(event.target.value)}
+                className="min-w-0 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                placeholder="Optional remarks"
+              />
+            </label>
+          </div>
+
+          {isLoading ? (
+            <div className="mt-5 flex min-h-60 items-center justify-center rounded-2xl bg-slate-50">
+              <Loader2 className="size-8 animate-spin text-cyan-600" />
+            </div>
+          ) : items.length === 0 ? (
+            <div className="mt-5 rounded-2xl bg-slate-50 p-5 text-sm font-semibold text-slate-500">
+              No questionnaire items were found for this survey.
+            </div>
+          ) : (
+            <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
+              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-sm font-black uppercase tracking-wide text-slate-500">Hardcopy Frequency Counts</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+                  <thead className="bg-white text-xs font-black uppercase tracking-wide text-slate-400">
+                    <tr>
+                      <th className="px-4 py-3">Section</th>
+                      <th className="px-4 py-3">Checklist Item</th>
+                      {([1, 2, 3, 4, 5] as LikertValue[]).map((rating) => (
+                        <th key={rating} className="px-3 py-3 text-center">Rating {rating}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
+                    {items.map((item) => (
+                      <tr key={item.id}>
+                        <td className="min-w-48 px-4 py-3 align-top font-black text-slate-950 wrap-anywhere">{item.sectionTitle}</td>
+                        <td className="min-w-96 px-4 py-3 align-top font-semibold leading-6 wrap-anywhere">{item.statement}</td>
+                        {([1, 2, 3, 4, 5] as LikertValue[]).map((rating) => (
+                          <td key={`${item.id}-${rating}`} className="px-3 py-3 align-top">
+                            <input
+                              value={getManualCountValue(counts, item.id, rating)}
+                              onChange={(event) => onCountChange(item.id, rating, event.target.value)}
+                              inputMode="numeric"
+                              aria-label={`${item.code} rating ${rating} hardcopy count`}
+                              className="w-20 rounded-xl border border-slate-200 px-3 py-2 text-center text-sm font-black outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                              placeholder="0"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex shrink-0 flex-col gap-3 border-t border-slate-200 bg-slate-50 p-4 sm:flex-row sm:justify-end sm:p-6">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-100"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isLoading || isSaving || items.length === 0}
+            onClick={onSubmit}
+            className="inline-flex justify-center gap-2 rounded-2xl bg-cyan-600 px-5 py-3 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            Save Hardcopy Results
+          </button>
+        </div>
+      </section>
+    </div>
   )
 }
 
@@ -1295,10 +1743,9 @@ function MethodReferenceCard() {
           <h2 className="wrap-break-word text-lg font-black sm:text-xl">Statistical and Survey Reference</h2>
           <p className="mt-2 text-sm leading-7 text-slate-600 wrap-anywhere">
             This statistics page follows an SPSS-inspired descriptive statistics workflow: frequency distribution, mean,
-            weighted mean, variance, standard deviation, and interpretation by Likert mean range. ANOVA is an inferential
-            method for comparing group means and can be added later when respondent groups need to be tested. The survey
-            checklist flow is inspired by Google Forms because respondents answer shareable form links and submit responses
-            digitally.
+            weighted mean, variance, standard deviation, and interpretation by Likert mean range. Online submissions and
+            encoded hardcopy checklist counts are linked through the same selected survey form, so both sources can be
+            calculated together or filtered separately when needed.
           </p>
         </div>
       </div>
