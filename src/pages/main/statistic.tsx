@@ -248,6 +248,26 @@ function getDefaultSourceBreakdown(summary: StatisticsSummary) {
   }
 }
 
+function getTotalRespondentCount(
+  responseSource: ResponseSourceFilter,
+  totalResponseCount: number,
+  sourceBreakdown: ReturnType<typeof getDefaultSourceBreakdown>,
+  onlineRespondentCount: number,
+) {
+  const onlineRespondents = Math.max(onlineRespondentCount, sourceBreakdown.onlineResponseCount)
+  const hardcopyRespondents = sourceBreakdown.hardcopyResponseCount
+
+  if (responseSource === "online") {
+    return Math.max(onlineRespondents, totalResponseCount)
+  }
+
+  if (responseSource === "hardcopy") {
+    return totalResponseCount
+  }
+
+  return Math.max(onlineRespondents + hardcopyRespondents, totalResponseCount)
+}
+
 function getSourceLabel(responseSource: ResponseSourceFilter) {
   if (responseSource === "online") {
     return "Online Only"
@@ -680,9 +700,15 @@ export function Statistic() {
   const selectedFormTitle = useMemo(() => getSelectedFormTitle(forms, selectedFormCode), [forms, selectedFormCode])
   const sourceBreakdown = useMemo(() => getDefaultSourceBreakdown(summary), [summary])
   const selectedSourceLabel = getSourceLabel(selectedResponseSource)
-  const totalResponseCount = summary.responseCount || Math.max(surveyResponses.length, sourceBreakdown.onlineResponseCount + sourceBreakdown.hardcopyResponseCount)
-  const respondentCount = new Set(surveyResponses.map(getRespondentKey)).size
-  const totalRespondentCount = selectedResponseSource === "hardcopy" ? totalResponseCount : respondentCount || totalResponseCount
+  const totalResponsesFromBreakdown = sourceBreakdown.onlineResponseCount + sourceBreakdown.hardcopyResponseCount
+  const totalResponseCount = summary.responseCount || Math.max(surveyResponses.length, totalResponsesFromBreakdown)
+  const onlineRespondentCount = new Set(surveyResponses.map(getRespondentKey)).size
+  const totalRespondentCount = getTotalRespondentCount(
+    selectedResponseSource,
+    totalResponseCount,
+    sourceBreakdown,
+    onlineRespondentCount,
+  )
   const manualQuestionnaireItems = useMemo(() => getQuestionnaireItems(manualQuestionnaire), [manualQuestionnaire])
   const overallResultNarrative = getOverallResultNarrative(
     summary,
