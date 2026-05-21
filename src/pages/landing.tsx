@@ -14,6 +14,7 @@ import {
   Loader2,
   ListChecks,
   Menu,
+  Pencil,
   Plus,
   ShieldCheck,
   Trash2,
@@ -651,6 +652,11 @@ export function Landing() {
   const [createMode, setCreateMode] = useState<"single" | "series">("single")
   const [createSurveyTitle, setCreateSurveyTitle] = useState("")
   const [createSurveyDescription, setCreateSurveyDescription] = useState("")
+  const [editingSurvey, setEditingSurvey] = useState<SurveyForm | null>(null)
+  const [editSurveyTitle, setEditSurveyTitle] = useState("")
+  const [editSurveyDescription, setEditSurveyDescription] = useState("")
+  const [isUpdatingSurvey, setIsUpdatingSurvey] = useState(false)
+  const [deletingSurveyFormId, setDeletingSurveyFormId] = useState<string | null>(null)
   const [documentSurveyDraft, setDocumentSurveyDraft] = useState<GeneratedSurveyDraft | null>(null)
   const [isReadingSurveyDocument, setIsReadingSurveyDocument] = useState(false)
   const [isSurveyDocumentDragActive, setIsSurveyDocumentDragActive] = useState(false)
@@ -764,6 +770,83 @@ export function Landing() {
       toast.success("Survey share link copied.")
     } catch {
       toast.error("Unable to copy survey share link.")
+    }
+  }
+
+  function openEditExistingSurvey(form: SurveyForm) {
+    setEditingSurvey(form)
+    setEditSurveyTitle(form.title)
+    setEditSurveyDescription(form.description ?? "")
+  }
+
+  function closeEditExistingSurvey() {
+    if (isUpdatingSurvey) return
+
+    setEditingSurvey(null)
+    setEditSurveyTitle("")
+    setEditSurveyDescription("")
+  }
+
+  async function handleUpdateExistingSurvey() {
+    if (!editingSurvey) return
+
+    const title = editSurveyTitle.trim()
+
+    if (!title) {
+      toast.error("Please enter the survey title.")
+      return
+    }
+
+    setIsUpdatingSurvey(true)
+
+    try {
+      const updatedForm = await surveyStatService.updateSurveyForm(editingSurvey.id, {
+        title,
+        description: editSurveyDescription.trim(),
+      })
+
+      setForms((current) => current.map((form) => (form.id === updatedForm.id ? updatedForm : form)))
+      setEditingSurvey(updatedForm)
+      toast.success("Survey updated successfully.")
+      closeEditExistingSurvey()
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setIsUpdatingSurvey(false)
+    }
+  }
+
+  async function handleDeleteExistingSurvey(form: SurveyForm) {
+    const shouldDelete = window.confirm(
+      `Delete "${form.title}"? This will remove the survey, its items, and submitted responses.`,
+    )
+
+    if (!shouldDelete) return
+
+    setDeletingSurveyFormId(form.id)
+
+    try {
+      await surveyStatService.deleteSurveyForm(form.id)
+
+      const nextForms = forms.filter((item) => item.id !== form.id)
+
+      setForms(nextForms)
+      setSelectedSurveyCodes((currentCodes) => {
+        const nextCodes = currentCodes.filter((code) => code !== form.code)
+
+        return nextCodes.length > 0 ? nextCodes : nextForms[0]?.code ? [nextForms[0].code] : []
+      })
+
+      if (editingSurvey?.id === form.id) {
+        closeEditExistingSurvey()
+      }
+
+      toast.success("Survey deleted successfully.")
+      await loadLandingData()
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setDeletingSurveyFormId(null)
     }
   }
 
@@ -1434,6 +1517,7 @@ export function Landing() {
             {forms.map((form, index) => {
               const isSelected = selectedSurveyCodes.includes(form.code)
               const isUpdatingRespondentInfo = updatingRespondentInfoFormId === form.id
+              const isDeletingSurvey = deletingSurveyFormId === form.id
 
               return (
                 <div
@@ -1471,6 +1555,23 @@ export function Landing() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => openEditExistingSurvey(form)}
+                        className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-full bg-cyan-400/10 px-3 py-2 text-xs font-black uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/20 hover:text-white sm:w-auto"
+                      >
+                        <Pencil className="size-3.5 shrink-0" />
+                        <span className="truncate">Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteExistingSurvey(form)}
+                        disabled={isDeletingSurvey}
+                        className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-full bg-red-400/10 px-3 py-2 text-xs font-black uppercase tracking-wide text-red-100 transition hover:bg-red-400/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                      >
+                        {isDeletingSurvey ? <Loader2 className="size-3.5 shrink-0 animate-spin" /> : <Trash2 className="size-3.5 shrink-0" />}
+                        <span className="truncate">{isDeletingSurvey ? "Deleting" : "Delete"}</span>
+                      </button>
+                      <button
+                        type="button"
                         role="switch"
                         aria-checked={form.respondentInformationRequired}
                         disabled={isUpdatingRespondentInfo}
@@ -1497,6 +1598,62 @@ export function Landing() {
                 </div>
               )
             })}
+          </div>
+        </DialogShell>
+      ) : null}
+
+      {editingSurvey ? (
+        <DialogShell
+          title="Edit Existing Survey"
+          description="Update the selected survey title and description."
+          onClose={closeEditExistingSurvey}
+          footer={
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="max-w-full wrap-break-word text-sm font-semibold text-slate-300">
+                Editing {editingSurvey.title}
+              </p>
+              <div className="grid w-full min-w-0 gap-3 sm:w-auto sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={closeEditExistingSurvey}
+                  disabled={isUpdatingSurvey}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUpdateExistingSurvey}
+                  disabled={isUpdatingSurvey}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 sm:w-auto"
+                >
+                  {isUpdatingSurvey ? <Loader2 className="size-4 animate-spin" /> : <Pencil className="size-4" />}
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          }
+        >
+          <div className="space-y-5">
+            <label className="block min-w-0">
+              <span className="text-sm font-black text-slate-200">Survey Title</span>
+              <input
+                value={editSurveyTitle}
+                onChange={(event) => setEditSurveyTitle(event.target.value)}
+                className="mt-2 w-full max-w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10"
+                placeholder="Enter survey title"
+              />
+            </label>
+
+            <label className="block min-w-0">
+              <span className="text-sm font-black text-slate-200">Description</span>
+              <textarea
+                value={editSurveyDescription}
+                onChange={(event) => setEditSurveyDescription(event.target.value)}
+                className="mt-2 min-h-32 w-full max-w-full resize-y rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10"
+                placeholder="Describe the research purpose of the survey"
+              />
+            </label>
           </div>
         </DialogShell>
       ) : null}

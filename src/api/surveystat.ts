@@ -267,6 +267,13 @@ export type CreateSurveySeriesPayload = {
   forms: CreateSurveyFormPayload[]
 }
 
+export type UpdateSurveyFormPayload = {
+  title?: string
+  description?: string | null
+  respondentInformationRequired?: boolean
+  isActive?: boolean
+}
+
 export type UpdateSurveyFormRespondentInformationPayload = {
   respondentInformationRequired: boolean
 }
@@ -689,6 +696,12 @@ export const surveyStatService = {
 
   createSurveySeries: (payload: CreateSurveySeriesPayload) =>
     surveystatApi.post<SurveyQuestionnaireForm[]>("/surveys/series", payload),
+
+  updateSurveyForm: (formId: string, payload: UpdateSurveyFormPayload) =>
+    surveystatApi.patch<SurveyForm>(`/surveys/forms/${encodeURIComponent(formId)}`, payload),
+
+  deleteSurveyForm: (formId: string) =>
+    surveystatApi.del<SurveyForm>(`/surveys/forms/${encodeURIComponent(formId)}`),
 
   updateSurveyFormRespondentInformation: (formId: string, payload: UpdateSurveyFormRespondentInformationPayload) =>
     surveystatApi.patch<SurveyForm>(`/surveys/forms/${encodeURIComponent(formId)}/respondent-information`, payload),
