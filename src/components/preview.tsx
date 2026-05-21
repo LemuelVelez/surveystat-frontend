@@ -1,6 +1,5 @@
-import type { ReactNode } from "react"
-import { Download, FileText, Maximize2, X } from "lucide-react"
-import { jsPDF } from "jspdf"
+import { useState, type ReactNode } from "react"
+import { Download, Maximize2, X } from "lucide-react"
 
 export type PreviewColumn<T extends object> = {
   key: keyof T | string
@@ -30,23 +29,30 @@ type PreviewProps<T extends object> = {
   onClose: () => void
 }
 
-type PdfImage = {
-  dataUrl: string
-  format: "JPEG" | "PNG" | "WEBP"
-  width: number
+type ImageField = {
+  label: string
+  value: string
+  imageSource?: string
+  image?: HTMLImageElement | null
+}
+
+type ImageRecord = {
+  title: string
+  fields: ImageField[]
   height: number
 }
 
-type PdfField = {
-  label: string
-  value: string
-  image: PdfImage | null
-  hasImageSource: boolean
-}
-
-const PDF_MARGIN = 32
-const PDF_LINE_HEIGHT = 11
-const PDF_CARD_RADIUS = 12
+const IMAGE_WIDTH = 1600
+const IMAGE_MARGIN = 64
+const IMAGE_CARD_RADIUS = 24
+const IMAGE_LINE_HEIGHT = 28
+const IMAGE_FONT = "Inter, Arial, sans-serif"
+const IMAGE_BACKGROUND = "#f8fafc"
+const IMAGE_TEXT = "#0f172a"
+const IMAGE_MUTED = "#475569"
+const IMAGE_BORDER = "#e2e8f0"
+const IMAGE_HEADER = "#0f172a"
+const IMAGE_ACCENT = "#0891b2"
 
 function sanitizeFileName(value: string) {
   return value
@@ -73,42 +79,6 @@ function getImageExportValue<T extends object>(row: T, column: PreviewColumn<T>,
   return column.getImageValue?.(row, index) ?? ""
 }
 
-function isDataImageValue(value: string) {
-  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(value.trim())
-}
-
-function isSupportedPdfDataImage(value: string) {
-  return /^data:image\/(png|jpe?g|webp);base64,/i.test(value.trim())
-}
-
-function isFetchableImageValue(value: string) {
-  return /^(https?:\/\/|blob:|\/)/i.test(value.trim())
-}
-
-function getImageFetchCredentials(value: string): RequestCredentials {
-  if (typeof window === "undefined") {
-    return "omit"
-  }
-
-  try {
-    const url = new URL(value, window.location.origin)
-    return url.origin === window.location.origin ? "include" : "omit"
-  } catch {
-    return "omit"
-  }
-}
-
-function getImageFormat(value: string): PdfImage["format"] {
-  const match = value.match(/^data:image\/(png|jpe?g|webp);base64,/i)
-  const format = match?.[1]?.toLowerCase()
-
-  if (format === "jpg") return "JPEG"
-  if (format === "jpeg") return "JPEG"
-  if (format === "webp") return "WEBP"
-
-  return "PNG"
-}
-
 function getExportText(value: string | number | null | undefined) {
   if (value === undefined || value === null) {
     return "—"
@@ -130,304 +100,379 @@ function getSummaryExportText(item: PreviewSummaryItem) {
   return "—"
 }
 
-function readBlobAsDataUrl(blob: Blob) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-
-    reader.onload = () => resolve(String(reader.result ?? ""))
-    reader.onerror = () => reject(reader.error ?? new Error("Unable to read image data."))
-    reader.readAsDataURL(blob)
-  })
+function isImageSource(value: string) {
+  return /^(data:image\/[a-z0-9.+-]+;base64,|https?:\/\/|blob:|\/)/i.test(value.trim())
 }
 
-function getImageDimensions(source: string) {
-  return new Promise<{ width: number; height: number } | null>((resolve) => {
+function getImageFetchCredentials(value: string): RequestCredentials {
+  if (typeof window === "undefined") {
+    return "omit"
+  }
+
+  try {
+    const url = new URL(value, window.location.origin)
+    return url.origin === window.location.origin ? "include" : "omit"
+  } catch {
+    return "omit"
+  }
+}
+
+function loadImage(source: string) {
+  return new Promise<HTMLImageElement | null>((resolve) => {
     const image = new Image()
 
-    image.onload = () => {
-      resolve({
-        width: image.naturalWidth || image.width || 1,
-        height: image.naturalHeight || image.height || 1,
-      })
+    if (!source.startsWith("data:")) {
+      image.crossOrigin = "anonymous"
     }
+
+    image.onload = () => resolve(image)
     image.onerror = () => resolve(null)
     image.src = source
   })
 }
 
-async function convertImageToPngDataUrl(source: string) {
-  const dimensions = await getImageDimensions(source)
-
-  if (!dimensions || typeof document === "undefined") {
-    return ""
-  }
-
-  const image = new Image()
-
-  return new Promise<string>((resolve) => {
-    image.onload = () => {
-      const canvas = document.createElement("canvas")
-      canvas.width = dimensions.width
-      canvas.height = dimensions.height
-
-      const context = canvas.getContext("2d")
-
-      if (!context) {
-        resolve("")
-        return
-      }
-
-      context.drawImage(image, 0, 0, dimensions.width, dimensions.height)
-
-      try {
-        resolve(canvas.toDataURL("image/png"))
-      } catch {
-        resolve("")
-      }
-    }
-    image.onerror = () => resolve("")
-    image.src = source
-  })
-}
-
-async function resolvePdfImage(value: string): Promise<PdfImage | null> {
+async function resolveCanvasImage(value: string) {
   const imageSource = value.trim()
 
-  if (!imageSource) {
+  if (!imageSource || !isImageSource(imageSource)) {
     return null
   }
 
+  if (imageSource.startsWith("data:") || imageSource.startsWith("blob:")) {
+    return loadImage(imageSource)
+  }
+
   try {
-    let dataUrl = ""
+    const response = await fetch(imageSource, {
+      credentials: getImageFetchCredentials(imageSource),
+      mode: "cors",
+    })
 
-    if (isDataImageValue(imageSource)) {
-      dataUrl = isSupportedPdfDataImage(imageSource) ? imageSource : await convertImageToPngDataUrl(imageSource)
-    } else if (isFetchableImageValue(imageSource)) {
-      const response = await fetch(imageSource, {
-        credentials: getImageFetchCredentials(imageSource),
-        mode: "cors",
-      })
-
-      if (!response.ok) {
-        return null
-      }
-
-      const blob = await response.blob()
-
-      if (!blob.type.toLowerCase().startsWith("image/")) {
-        return null
-      }
-
-      const blobDataUrl = await readBlobAsDataUrl(blob)
-      dataUrl = isSupportedPdfDataImage(blobDataUrl) ? blobDataUrl : await convertImageToPngDataUrl(blobDataUrl)
-    }
-
-    if (!dataUrl || !isSupportedPdfDataImage(dataUrl)) {
+    if (!response.ok) {
       return null
     }
 
-    const dimensions = await getImageDimensions(dataUrl)
+    const blob = await response.blob()
 
-    return {
-      dataUrl,
-      format: getImageFormat(dataUrl),
-      width: dimensions?.width ?? 1,
-      height: dimensions?.height ?? 1,
+    if (!blob.type.toLowerCase().startsWith("image/")) {
+      return null
     }
+
+    const objectUrl = URL.createObjectURL(blob)
+    const image = await loadImage(objectUrl)
+    URL.revokeObjectURL(objectUrl)
+
+    return image
   } catch {
     return null
   }
 }
 
-function addPageIfNeeded(document: jsPDF, currentY: number, requiredHeight: number) {
-  const pageHeight = document.internal.pageSize.getHeight()
+function roundRectPath(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  const safeRadius = Math.min(radius, width / 2, height / 2)
 
-  if (currentY + requiredHeight <= pageHeight - PDF_MARGIN) {
-    return currentY
+  context.beginPath()
+  context.moveTo(x + safeRadius, y)
+  context.lineTo(x + width - safeRadius, y)
+  context.quadraticCurveTo(x + width, y, x + width, y + safeRadius)
+  context.lineTo(x + width, y + height - safeRadius)
+  context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height)
+  context.lineTo(x + safeRadius, y + height)
+  context.quadraticCurveTo(x, y + height, x, y + height - safeRadius)
+  context.lineTo(x, y + safeRadius)
+  context.quadraticCurveTo(x, y, x + safeRadius, y)
+  context.closePath()
+}
+
+function fillRoundedRect(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+  fillStyle: string,
+  strokeStyle?: string,
+) {
+  roundRectPath(context, x, y, width, height, radius)
+  context.fillStyle = fillStyle
+  context.fill()
+
+  if (strokeStyle) {
+    context.strokeStyle = strokeStyle
+    context.lineWidth = 2
+    context.stroke()
   }
-
-  document.addPage()
-  return PDF_MARGIN
 }
 
-function splitText(document: jsPDF, value: string, maxWidth: number) {
-  return document.splitTextToSize(value || "—", maxWidth) as string[]
+function setCanvasFont(context: CanvasRenderingContext2D, size: number, weight: number | "normal" | "bold" = "normal") {
+  context.font = `${weight} ${size}px ${IMAGE_FONT}`
 }
 
-function drawWrappedText(document: jsPDF, text: string, x: number, y: number, maxWidth: number, maxLines?: number) {
-  const lines = splitText(document, text, maxWidth)
-  const visibleLines = typeof maxLines === "number" ? lines.slice(0, maxLines) : lines
+function wrapText(context: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  const normalizedText = getExportText(text).replace(/\s+/g, " ")
+  const words = normalizedText.split(" ")
+  const lines: string[] = []
+  let line = ""
 
-  visibleLines.forEach((line, index) => {
-    document.text(line, x, y + index * PDF_LINE_HEIGHT)
+  words.forEach((word) => {
+    const candidate = line ? `${line} ${word}` : word
+
+    if (context.measureText(candidate).width <= maxWidth || !line) {
+      line = candidate
+      return
+    }
+
+    lines.push(line)
+    line = word
   })
 
-  return y + Math.max(visibleLines.length, 1) * PDF_LINE_HEIGHT
-}
-
-function drawPdfImage(document: jsPDF, image: PdfImage, x: number, y: number, maxWidth: number, maxHeight: number) {
-  const widthRatio = maxWidth / Math.max(image.width, 1)
-  const heightRatio = maxHeight / Math.max(image.height, 1)
-  const ratio = Math.min(widthRatio, heightRatio)
-  const width = Math.max(1, image.width * ratio)
-  const height = Math.max(1, image.height * ratio)
-
-  document.addImage(image.dataUrl, image.format, x, y, width, height)
-}
-
-function getFieldHeight(document: jsPDF, field: PdfField, width: number) {
-  if (field.image) {
-    return 72
+  if (line) {
+    lines.push(line)
   }
 
-  document.setFont("helvetica", "normal")
-  document.setFontSize(8)
-
-  return 19 + splitText(document, field.value, width).length * PDF_LINE_HEIGHT
+  return lines.length > 0 ? lines : ["—"]
 }
 
-function drawField(document: jsPDF, field: PdfField, x: number, y: number, width: number) {
-  document.setFont("helvetica", "bold")
-  document.setFontSize(7.5)
-  document.setTextColor(71, 85, 105)
-  document.text(field.label.toUpperCase(), x, y)
+function drawWrappedText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  maxLines?: number,
+) {
+  const lines = wrapText(context, text, maxWidth)
+  const visibleLines = typeof maxLines === "number" ? lines.slice(0, maxLines) : lines
+  const renderedLines = [...visibleLines]
+
+  if (typeof maxLines === "number" && lines.length > maxLines && renderedLines.length > 0) {
+    const lastLineIndex = renderedLines.length - 1
+    const lastLine = renderedLines[lastLineIndex]
+    renderedLines[lastLineIndex] = lastLine.length > 3 ? `${lastLine.slice(0, Math.max(0, lastLine.length - 3))}...` : "..."
+  }
+
+  renderedLines.forEach((line, index) => {
+    context.fillText(line, x, y + index * IMAGE_LINE_HEIGHT)
+  })
+
+  return y + Math.max(renderedLines.length, 1) * IMAGE_LINE_HEIGHT
+}
+
+function getWrappedTextHeight(context: CanvasRenderingContext2D, text: string, width: number, maxLines?: number) {
+  const lineCount = wrapText(context, text, width).length
+  return Math.max(1, typeof maxLines === "number" ? Math.min(lineCount, maxLines) : lineCount) * IMAGE_LINE_HEIGHT
+}
+
+function drawImageInside(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  maxWidth: number,
+  maxHeight: number,
+) {
+  const ratio = Math.min(maxWidth / Math.max(image.naturalWidth, 1), maxHeight / Math.max(image.naturalHeight, 1))
+  const width = Math.max(1, image.naturalWidth * ratio)
+  const height = Math.max(1, image.naturalHeight * ratio)
+
+  context.drawImage(image, x, y, width, height)
+}
+
+function getFieldHeight(context: CanvasRenderingContext2D, field: ImageField, width: number) {
+  if (field.image) {
+    return 122
+  }
+
+  setCanvasFont(context, 22, 700)
+  return 38 + getWrappedTextHeight(context, field.value, width, 4)
+}
+
+function drawField(context: CanvasRenderingContext2D, field: ImageField, x: number, y: number, width: number) {
+  setCanvasFont(context, 17, 800)
+  context.fillStyle = IMAGE_ACCENT
+  context.fillText(field.label.toUpperCase(), x, y)
 
   if (field.image) {
-    drawPdfImage(document, field.image, x, y + 8, Math.min(128, width), 52)
+    drawImageInside(context, field.image, x, y + 18, Math.min(180, width), 86)
     return
   }
 
-  document.setFont("helvetica", "normal")
-  document.setFontSize(8)
-  document.setTextColor(15, 23, 42)
-  drawWrappedText(document, field.value, x, y + 13, width)
+  setCanvasFont(context, 22, 700)
+  context.fillStyle = IMAGE_TEXT
+  drawWrappedText(context, field.value, x, y + 34, width, 4)
 }
 
-function drawSummaryCards(document: jsPDF, fields: PdfField[], startY: number) {
+function buildSummaryRecords(context: CanvasRenderingContext2D, fields: ImageField[]) {
+  if (fields.length === 0) {
+    return {
+      height: 0,
+      rows: [] as ImageField[][],
+    }
+  }
+
+  const gap = 18
+  const columns = 4
+  const contentWidth = IMAGE_WIDTH - IMAGE_MARGIN * 2
+  const cardWidth = (contentWidth - gap * (columns - 1)) / columns
+  const rows: ImageField[][] = []
+
+  for (let index = 0; index < fields.length; index += columns) {
+    rows.push(fields.slice(index, index + columns))
+  }
+
+  setCanvasFont(context, 22, 700)
+
+  const height = rows.reduce((total, row) => {
+    const rowHeight = Math.max(...row.map((field) => getFieldHeight(context, field, cardWidth - 40)), 98)
+    return total + rowHeight + gap
+  }, 52)
+
+  return {
+    height,
+    rows,
+  }
+}
+
+function drawSummary(
+  context: CanvasRenderingContext2D,
+  fields: ImageField[],
+  startY: number,
+) {
   if (fields.length === 0) {
     return startY
   }
 
-  const pageWidth = document.internal.pageSize.getWidth()
-  const contentWidth = pageWidth - PDF_MARGIN * 2
-  const gap = 10
-  const cardsPerRow = 4
-  const cardWidth = (contentWidth - gap * (cardsPerRow - 1)) / cardsPerRow
-  const cardHeight = 74
-  let y = addPageIfNeeded(document, startY, 24 + cardHeight)
+  const gap = 18
+  const columns = 4
+  const contentWidth = IMAGE_WIDTH - IMAGE_MARGIN * 2
+  const cardWidth = (contentWidth - gap * (columns - 1)) / columns
+  const { rows } = buildSummaryRecords(context, fields)
+  let y = startY
 
-  document.setFont("helvetica", "bold")
-  document.setFontSize(10)
-  document.setTextColor(15, 23, 42)
-  document.text("Summary", PDF_MARGIN, y)
-  y += 12
+  setCanvasFont(context, 26, 900)
+  context.fillStyle = IMAGE_TEXT
+  context.fillText("Summary", IMAGE_MARGIN, y)
+  y += 32
 
-  fields.forEach((field, index) => {
-    const columnIndex = index % cardsPerRow
+  rows.forEach((row) => {
+    const rowHeight = Math.max(...row.map((field) => getFieldHeight(context, field, cardWidth - 40)), 98)
 
-    if (columnIndex === 0 && index > 0) {
-      y = addPageIfNeeded(document, y + cardHeight + gap, cardHeight)
-    }
+    row.forEach((field, columnIndex) => {
+      const x = IMAGE_MARGIN + columnIndex * (cardWidth + gap)
 
-    const x = PDF_MARGIN + columnIndex * (cardWidth + gap)
+      fillRoundedRect(context, x, y, cardWidth, rowHeight, IMAGE_CARD_RADIUS, "#ecfeff", "#cffafe")
+      drawField(context, field, x + 20, y + 34, cardWidth - 40)
+    })
 
-    document.setDrawColor(207, 250, 254)
-    document.setFillColor(236, 254, 255)
-    document.roundedRect(x, y, cardWidth, cardHeight, PDF_CARD_RADIUS, PDF_CARD_RADIUS, "FD")
-
-    drawField(document, field, x + 12, y + 18, cardWidth - 24)
+    y += rowHeight + gap
   })
 
-  return y + cardHeight + 22
+  return y + 24
 }
 
-function getRowCardHeight(document: jsPDF, fields: PdfField[], cardWidth: number) {
-  const gap = 12
-  const fieldWidth = (cardWidth - 32 - gap) / 2
+function getRecordHeight(context: CanvasRenderingContext2D, record: ImageRecord, width: number) {
+  const gap = 18
+  const fieldWidth = (width - 48 - gap) / 2
   const rowHeights: number[] = []
 
-  for (let index = 0; index < fields.length; index += 2) {
+  for (let index = 0; index < record.fields.length; index += 2) {
     rowHeights.push(
       Math.max(
-        getFieldHeight(document, fields[index], fieldWidth),
-        fields[index + 1] ? getFieldHeight(document, fields[index + 1], fieldWidth) : 0,
+        getFieldHeight(context, record.fields[index], fieldWidth),
+        record.fields[index + 1] ? getFieldHeight(context, record.fields[index + 1], fieldWidth) : 0,
       ),
     )
   }
 
-  return 48 + rowHeights.reduce((total, height) => total + height, 0) + Math.max(0, rowHeights.length - 1) * 10
+  return 92 + rowHeights.reduce((total, height) => total + height, 0) + Math.max(0, rowHeights.length - 1) * 16
 }
 
-function drawRowCard(document: jsPDF, fields: PdfField[], rowNumber: number, startY: number) {
-  const pageWidth = document.internal.pageSize.getWidth()
-  const cardWidth = pageWidth - PDF_MARGIN * 2
-  const gap = 12
-  const fieldWidth = (cardWidth - 32 - gap) / 2
-  const cardHeight = getRowCardHeight(document, fields, cardWidth)
-  const y = addPageIfNeeded(document, startY, cardHeight)
-  let fieldY = y + 40
+function drawRecord(context: CanvasRenderingContext2D, record: ImageRecord, index: number, startY: number) {
+  const cardWidth = IMAGE_WIDTH - IMAGE_MARGIN * 2
+  const gap = 18
+  const fieldWidth = (cardWidth - 48 - gap) / 2
+  const cardHeight = record.height
+  let fieldY = startY + 76
 
-  document.setDrawColor(226, 232, 240)
-  document.setFillColor(255, 255, 255)
-  document.roundedRect(PDF_MARGIN, y, cardWidth, cardHeight, PDF_CARD_RADIUS, PDF_CARD_RADIUS, "FD")
+  fillRoundedRect(context, IMAGE_MARGIN, startY, cardWidth, cardHeight, IMAGE_CARD_RADIUS, "#ffffff", IMAGE_BORDER)
+  fillRoundedRect(context, IMAGE_MARGIN, startY, cardWidth, 54, IMAGE_CARD_RADIUS, IMAGE_HEADER)
 
-  document.setFillColor(15, 23, 42)
-  document.roundedRect(PDF_MARGIN, y, cardWidth, 28, PDF_CARD_RADIUS, PDF_CARD_RADIUS, "F")
-  document.setTextColor(255, 255, 255)
-  document.setFont("helvetica", "bold")
-  document.setFontSize(10)
-  document.text(`Record ${rowNumber}`, PDF_MARGIN + 14, y + 18)
+  setCanvasFont(context, 22, 900)
+  context.fillStyle = "#ffffff"
+  context.fillText(`${index + 1}. ${record.title}`, IMAGE_MARGIN + 24, startY + 35)
 
-  for (let index = 0; index < fields.length; index += 2) {
-    const leftField = fields[index]
-    const rightField = fields[index + 1]
-    const leftHeight = getFieldHeight(document, leftField, fieldWidth)
-    const rightHeight = rightField ? getFieldHeight(document, rightField, fieldWidth) : 0
+  for (let fieldIndex = 0; fieldIndex < record.fields.length; fieldIndex += 2) {
+    const leftField = record.fields[fieldIndex]
+    const rightField = record.fields[fieldIndex + 1]
+    const leftHeight = getFieldHeight(context, leftField, fieldWidth)
+    const rightHeight = rightField ? getFieldHeight(context, rightField, fieldWidth) : 0
     const rowHeight = Math.max(leftHeight, rightHeight)
 
-    drawField(document, leftField, PDF_MARGIN + 16, fieldY, fieldWidth)
+    drawField(context, leftField, IMAGE_MARGIN + 24, fieldY, fieldWidth)
 
     if (rightField) {
-      drawField(document, rightField, PDF_MARGIN + 16 + fieldWidth + gap, fieldY, fieldWidth)
+      drawField(context, rightField, IMAGE_MARGIN + 24 + fieldWidth + gap, fieldY, fieldWidth)
     }
 
-    fieldY += rowHeight + 10
+    fieldY += rowHeight + 16
   }
 
-  return y + cardHeight + 14
+  return startY + cardHeight + 22
 }
 
-async function buildSummaryPdfFields(summary: PreviewSummaryItem[]) {
+function createMeasurementContext() {
+  const canvas = document.createElement("canvas")
+  canvas.width = IMAGE_WIDTH
+  canvas.height = 100
+  const context = canvas.getContext("2d")
+
+  if (!context) {
+    throw new Error("Unable to prepare image export.")
+  }
+
+  return context
+}
+
+async function buildSummaryImageFields(summary: PreviewSummaryItem[]) {
   return Promise.all(
     summary.map(async (item) => {
       const imageSource = item.imageValue?.trim() ?? ""
-      const image = imageSource ? await resolvePdfImage(imageSource) : null
+      const image = imageSource ? await resolveCanvasImage(imageSource) : null
 
       return {
         label: item.label,
         value: getSummaryExportText(item),
+        imageSource,
         image,
-        hasImageSource: Boolean(imageSource),
       }
     }),
   )
 }
 
-async function buildRowPdfFields<T extends object>(row: T, columns: PreviewColumn<T>[], rowIndex: number) {
+async function buildRowImageFields<T extends object>(row: T, columns: PreviewColumn<T>[], rowIndex: number) {
   return Promise.all(
     columns.map(async (column) => {
       const imageSource = getImageExportValue(row, column, rowIndex).trim()
-      const image = imageSource ? await resolvePdfImage(imageSource) : null
-      const value = getExportText(getCellValue(row, column, rowIndex))
+      const image = imageSource ? await resolveCanvasImage(imageSource) : null
 
       return {
         label: column.header,
-        value,
+        value: getExportText(getCellValue(row, column, rowIndex)),
+        imageSource,
         image,
-        hasImageSource: Boolean(imageSource),
       }
     }),
   )
+}
+
+function downloadDataUrl(dataUrl: string, fileName: string) {
+  const link = document.createElement("a")
+  link.href = dataUrl
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
 }
 
 export function Preview<T extends object>({
@@ -442,49 +487,89 @@ export function Preview<T extends object>({
   children,
   onClose,
 }: PreviewProps<T>) {
+  const [isExportingImage, setIsExportingImage] = useState(false)
+
   if (!isOpen) {
     return null
   }
 
   const safeFileName = sanitizeFileName(fileName || title)
 
-  async function downloadPdf() {
-    const document = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" })
-    const pageWidth = document.internal.pageSize.getWidth()
+  async function downloadImage() {
+    if (typeof document === "undefined") return
 
-    document.setFillColor(15, 23, 42)
-    document.roundedRect(32, 28, pageWidth - 64, 82, 18, 18, "F")
-    document.setTextColor(255, 255, 255)
-    document.setFont("helvetica", "bold")
-    document.setFontSize(18)
-    document.text(title, 54, 64)
-    document.setFont("helvetica", "normal")
-    document.setFontSize(10)
-    document.setTextColor(207, 250, 254)
-    document.text(subtitle || "SurveyStat preview and export", 54, 84, {
-      maxWidth: pageWidth - 108,
-    })
+    setIsExportingImage(true)
 
-    let startY = 132
-    const summaryFields = await buildSummaryPdfFields(summary)
-    startY = drawSummaryCards(document, summaryFields, startY)
+    try {
+      const measurementContext = createMeasurementContext()
+      const summaryFields = await buildSummaryImageFields(summary)
+      const summaryLayout = buildSummaryRecords(measurementContext, summaryFields)
+      const detailRecords = await Promise.all(
+        rows.map(async (row, index) => {
+          const fields = await buildRowImageFields(row, columns, index)
+          const titleField = fields[0]?.value ? fields[0].value : `Record ${index + 1}`
+          const record: ImageRecord = {
+            title: titleField,
+            fields,
+            height: 0,
+          }
 
-    if (rows.length > 0) {
-      document.setFont("helvetica", "bold")
-      document.setFontSize(10)
-      document.setTextColor(15, 23, 42)
-      startY = addPageIfNeeded(document, startY, 24)
-      document.text("Details", PDF_MARGIN, startY)
-      startY += 12
+          record.height = getRecordHeight(measurementContext, record, IMAGE_WIDTH - IMAGE_MARGIN * 2)
+          return record
+        }),
+      )
+      const detailsHeight = detailRecords.reduce((total, record) => total + record.height + 22, rows.length > 0 ? 60 : 0)
+      const headerHeight = 160
+      const footerHeight = 72
+      const imageHeight = Math.max(900, headerHeight + summaryLayout.height + detailsHeight + footerHeight)
+      const canvas = document.createElement("canvas")
+      canvas.width = IMAGE_WIDTH
+      canvas.height = imageHeight
+      const context = canvas.getContext("2d")
 
-      for (let index = 0; index < rows.length; index += 1) {
-        const rowFields = await buildRowPdfFields(rows[index], columns, index)
-        startY = drawRowCard(document, rowFields, index + 1, startY)
+      if (!context) {
+        throw new Error("Unable to create image export.")
       }
-    }
 
-    document.save(`${safeFileName}.pdf`)
+      context.fillStyle = IMAGE_BACKGROUND
+      context.fillRect(0, 0, IMAGE_WIDTH, imageHeight)
+
+      fillRoundedRect(context, 36, 32, IMAGE_WIDTH - 72, 104, 32, IMAGE_HEADER)
+      setCanvasFont(context, 34, 900)
+      context.fillStyle = "#ffffff"
+      context.fillText(title, IMAGE_MARGIN, 78)
+
+      setCanvasFont(context, 20, 500)
+      context.fillStyle = "#cffafe"
+      drawWrappedText(context, subtitle || "SurveyStat image export", IMAGE_MARGIN, 110, IMAGE_WIDTH - IMAGE_MARGIN * 2, 1)
+
+      let y = 180
+      y = drawSummary(context, summaryFields, y)
+
+      if (detailRecords.length > 0) {
+        setCanvasFont(context, 26, 900)
+        context.fillStyle = IMAGE_TEXT
+        context.fillText("Details", IMAGE_MARGIN, y)
+        y += 30
+
+        detailRecords.forEach((record, index) => {
+          y = drawRecord(context, record, index, y)
+        })
+      }
+
+      setCanvasFont(context, 18, 600)
+      context.fillStyle = IMAGE_MUTED
+      context.fillText("Generated by SurveyStat", IMAGE_MARGIN, imageHeight - 34)
+
+      downloadDataUrl(canvas.toDataURL("image/png"), `${safeFileName}.png`)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setIsExportingImage(false)
+    }
   }
+
+  const isDownloadDisabled = isLoading || isExportingImage
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 px-3 py-3 backdrop-blur-sm sm:items-center sm:px-4 sm:py-6" role="dialog" aria-modal="true">
@@ -504,12 +589,12 @@ export function Preview<T extends object>({
           <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap">
             <button
               type="button"
-              onClick={() => void downloadPdf()}
-              disabled={isLoading}
+              onClick={() => void downloadImage()}
+              disabled={isDownloadDisabled}
               className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-2.5 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 sm:w-auto"
             >
-              <FileText className="size-4" />
-              Download PDF
+              <Download className="size-4" />
+              {isExportingImage ? "Creating Image..." : "Download Image"}
             </button>
             <button
               type="button"
@@ -534,54 +619,50 @@ export function Preview<T extends object>({
             </div>
           ) : null}
 
-          {children ? <div className="mb-5">{children}</div> : null}
+          {children}
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
-            {isLoading ? (
-              <div className="flex min-h-60 items-center justify-center rounded-2xl bg-white text-sm font-bold text-slate-500">
-                Preparing preview...
-              </div>
-            ) : rows.length === 0 ? (
-              <div className="flex min-h-60 items-center justify-center rounded-2xl bg-white text-sm font-bold text-slate-500">
-                No rows available to preview.
-              </div>
-            ) : (
-              <div className="grid gap-3 lg:grid-cols-2">
-                {rows.map((row, rowIndex) => (
-                  <div key={rowIndex} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                      <p className="text-xs font-black uppercase tracking-wide text-cyan-700">Record {rowIndex + 1}</p>
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-500">
-                        {columns.length} fields
-                      </span>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {columns.map((column) => (
-                        <div key={String(column.key)} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-                          <p className="max-w-xs truncate text-xs font-black uppercase tracking-wide text-slate-500">{column.header}</p>
-                          <div className="mt-1 max-w-xs text-sm font-semibold leading-6 text-slate-800 wrap-anywhere">
-                            {getRenderedCellValue(row, column, rowIndex)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-5 flex flex-col justify-end gap-2 sm:flex-row sm:flex-wrap">
-            <button
-              type="button"
-              onClick={() => void downloadPdf()}
-              disabled={isLoading}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm font-black text-cyan-700 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-            >
-              <Download className="size-4" />
-              PDF
-            </button>
+          <div className="overflow-hidden rounded-2xl border border-slate-200">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    {columns.map((column) => (
+                      <th key={String(column.key)} className="px-4 py-3 font-black text-slate-700">
+                        {column.header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={columns.length} className="px-4 py-8 text-center font-semibold text-slate-500">
+                        Loading preview...
+                      </td>
+                    </tr>
+                  ) : rows.length > 0 ? (
+                    rows.map((row, rowIndex) => (
+                      <tr key={rowIndex} className="align-top">
+                        {columns.map((column) => (
+                          <td key={String(column.key)} className="max-w-xs px-4 py-3 text-slate-700 wrap-anywhere">
+                            {(() => {
+                              const renderedValue = getRenderedCellValue(row, column, rowIndex)
+                              return renderedValue === "" || renderedValue === null || renderedValue === undefined ? "—" : renderedValue
+                            })()}
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={columns.length} className="px-4 py-8 text-center font-semibold text-slate-500">
+                        No preview rows available.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

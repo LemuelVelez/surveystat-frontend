@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react"
 import {
   ArrowUpRight,
   BarChart3,
   CheckCircle2,
   ClipboardCheck,
   Copy,
-  DatabaseZap,
+  FileText,
   FilePlus2,
   Layers3,
   Link2,
@@ -14,7 +14,9 @@ import {
   Menu,
   Plus,
   ShieldCheck,
+  Upload,
   UsersRound,
+  Wand2,
   X,
 } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
@@ -32,16 +34,16 @@ import {
 
 const features = [
   {
-    title: "Survey Collection",
+    title: "Chapter IV Data Gathering",
     icon: ClipboardCheck,
   },
   {
-    title: "Real-time Statistics",
-    icon: BarChart3,
+    title: "Document-to-Survey Reader",
+    icon: FileText,
   },
   {
-    title: "Interactive Tables",
-    icon: DatabaseZap,
+    title: "Mean and Statistics Results",
+    icon: BarChart3,
   },
 ]
 
@@ -85,18 +87,471 @@ function getDefaultSections(stepNumber: number): CreateSurveyFormPayload["sectio
   return [
     {
       code: `survey_${stepNumber}_section_1`,
-      title: "Survey Items",
+      title: "Chapter IV Survey Items",
       sortOrder: 1,
       items: [
         {
           code: `survey_${stepNumber}_item_1`,
-          statement: "Replace this sample checklist item with the actual survey indicator.",
+          statement: "Replace this sample checklist item with the actual Chapter IV survey indicator.",
           sortOrder: 1,
           isRequired: true,
         },
       ],
     },
   ]
+}
+
+
+type GeneratedSurveySections = NonNullable<CreateSurveyFormPayload["sections"]>
+
+type GeneratedSurveyDraft = {
+  fileName: string
+  title: string
+  description: string
+  sections: GeneratedSurveySections
+  sectionCount: number
+  itemCount: number
+}
+
+type ZipEntry = {
+  name: string
+  compressionMethod: number
+  compressedSize: number
+  localHeaderOffset: number
+}
+
+type DecompressionStreamConstructor = new (format: string) => TransformStream<Uint8Array, Uint8Array>
+
+function createArrayBufferBlobPart(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(buffer).set(bytes)
+  return buffer
+}
+
+const maximumGeneratedSections = 6
+const maximumGeneratedItemsPerSection = 10
+const maximumGeneratedItems = 50
+
+function readUint16(bytes: Uint8Array, offset: number) {
+  return bytes[offset] | (bytes[offset + 1] << 8)
+}
+
+function readUint32(bytes: Uint8Array, offset: number) {
+  return (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0
+}
+
+function decodeXmlEntities(value: string) {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&apos;/g, "'")
+}
+
+function normalizeDocumentText(value: string) {
+  return value
+    .replace(/\u0000/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\r\n?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
+function normalizeDocumentLine(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/^[•*\-–—]+\s*/g, "")
+    .replace(/^(?:\d+|[ivxlcdm]+)[.)]\s+/i, "")
+    .trim()
+}
+
+function hasUsefulLetters(value: string) {
+  return /[a-z]/i.test(value)
+}
+
+function isLikelySectionHeading(value: string) {
+  const line = normalizeDocumentLine(value)
+  const wordCount = line.split(/\s+/).filter(Boolean).length
+
+  if (!line || line.length > 90 || line.endsWith(".") || line.endsWith("?") || wordCount > 10) {
+    return false
+  }
+
+  return (
+    /^(chapter|part|section|area|domain|dimension|factor|category|construct|variable|indicator|objective)\b/i.test(line) ||
+    (/^[A-Z0-9\s:,&/()-]+$/.test(line) && /[A-Z]/.test(line) && wordCount >= 2)
+  )
+}
+
+function isLikelySurveyStatement(value: string) {
+  const line = normalizeDocumentLine(value)
+
+  if (line.length < 18 || line.length > 260 || !hasUsefulLetters(line)) {
+    return false
+  }
+
+  if (/^(figure|table|page|references|appendix|copyright|abstract|acknowledg(e)?ment)s?\b/i.test(line)) {
+    return false
+  }
+
+  return true
+}
+
+function getReadableDocumentTitle(fileName: string, text: string) {
+  const firstUsefulLine = text
+    .split("\n")
+    .map(normalizeDocumentLine)
+    .find((line) => line.length >= 8 && line.length <= 90 && hasUsefulLetters(line))
+
+  const baseName = fileName.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim()
+  return firstUsefulLine || baseName || "Chapter IV Research Survey"
+}
+
+function createDocumentSurveyDescription(fileName: string) {
+  return `Survey generated from ${fileName} for Chapter IV data gathering and statistical analysis.`
+}
+
+function createGeneratedSectionCode(title: string, index: number) {
+  return createCodeFromTitle(title, `section_${index + 1}`)
+}
+
+function createGeneratedItemCode(sectionCode: string, index: number) {
+  return `${sectionCode}_item_${index + 1}`.slice(0, 60)
+}
+
+function createFallbackGeneratedSections(): GeneratedSurveySections {
+  const items = [
+    "The research instrument clearly supports Chapter IV data gathering.",
+    "The survey indicators are understandable for the intended respondents.",
+    "The collected responses can be used to compute meaningful statistical results.",
+    "The survey structure is appropriate for descriptive analysis and interpretation.",
+  ]
+
+  return [
+    {
+      code: "chapter_iv_research_items",
+      title: "Chapter IV Research Items",
+      sortOrder: 1,
+      items: items.map((statement, index) => ({
+        code: `chapter_iv_research_item_${index + 1}`,
+        statement,
+        sortOrder: index + 1,
+        isRequired: true,
+      })),
+    },
+  ]
+}
+
+function buildSurveySectionsFromText(text: string): GeneratedSurveySections {
+  const lines = text
+    .split("\n")
+    .map(normalizeDocumentLine)
+    .filter(Boolean)
+
+  const sections: Array<{ title: string; items: string[] }> = []
+  let currentSection: { title: string; items: string[] } = {
+    title: "Survey Items",
+    items: [],
+  }
+  const seenStatements = new Set<string>()
+
+  function pushCurrentSection() {
+    if (currentSection.items.length === 0) return
+
+    sections.push(currentSection)
+    currentSection = {
+      title: "Survey Items",
+      items: [],
+    }
+  }
+
+  for (const line of lines) {
+    if (sections.length >= maximumGeneratedSections && currentSection.items.length >= maximumGeneratedItemsPerSection) {
+      break
+    }
+
+    if (isLikelySectionHeading(line)) {
+      if (currentSection.items.length > 0) {
+        pushCurrentSection()
+      }
+
+      if (sections.length < maximumGeneratedSections) {
+        currentSection.title = line
+      }
+
+      continue
+    }
+
+    if (!isLikelySurveyStatement(line)) {
+      continue
+    }
+
+    const normalizedStatementKey = line.toLowerCase()
+
+    if (seenStatements.has(normalizedStatementKey)) {
+      continue
+    }
+
+    seenStatements.add(normalizedStatementKey)
+    currentSection.items.push(line)
+
+    const totalItems = sections.reduce((total, section) => total + section.items.length, 0) + currentSection.items.length
+    if (currentSection.items.length >= maximumGeneratedItemsPerSection || totalItems >= maximumGeneratedItems) {
+      pushCurrentSection()
+    }
+  }
+
+  pushCurrentSection()
+
+  if (sections.length === 0) {
+    const sentenceCandidates = text
+      .split(/(?<=[.!?])\s+/)
+      .map(normalizeDocumentLine)
+      .filter(isLikelySurveyStatement)
+      .slice(0, maximumGeneratedItems)
+
+    if (sentenceCandidates.length > 0) {
+      sections.push({
+        title: "Survey Items",
+        items: sentenceCandidates,
+      })
+    }
+  }
+
+  const generatedSections = sections.slice(0, maximumGeneratedSections).map((section, sectionIndex) => {
+    const sectionCode = createGeneratedSectionCode(section.title, sectionIndex)
+
+    return {
+      code: sectionCode,
+      title: section.title,
+      sortOrder: sectionIndex + 1,
+      items: section.items.slice(0, maximumGeneratedItemsPerSection).map((statement, itemIndex) => ({
+        code: createGeneratedItemCode(sectionCode, itemIndex),
+        statement,
+        sortOrder: itemIndex + 1,
+        isRequired: true,
+      })),
+    }
+  })
+
+  return generatedSections.length > 0 ? generatedSections : createFallbackGeneratedSections()
+}
+
+function decodePdfLiteralString(value: string) {
+  return value
+    .replace(/\\([nrtbf()\\])/g, (_, escaped: string) => {
+      const map: Record<string, string> = {
+        n: "\n",
+        r: "\r",
+        t: "\t",
+        b: "\b",
+        f: "\f",
+        "(": "(",
+        ")": ")",
+        "\\": "\\",
+      }
+
+      return map[escaped] ?? escaped
+    })
+    .replace(/\\([0-7]{1,3})/g, (_, octal: string) => String.fromCharCode(Number.parseInt(octal, 8)))
+}
+
+function extractTextFromPdfBuffer(buffer: ArrayBuffer) {
+  const raw = new TextDecoder("windows-1252").decode(buffer)
+  const chunks: string[] = []
+
+  for (const match of raw.matchAll(/\((?:\\.|[^\\)]){3,}\)\s*(?:Tj|'|"|TJ)?/g)) {
+    const literal = match[0].replace(/\)\s*(?:Tj|'|"|TJ)?\s*$/, "")
+    const text = decodePdfLiteralString(literal.slice(1))
+
+    if (hasUsefulLetters(text)) {
+      chunks.push(text)
+    }
+  }
+
+  return normalizeDocumentText(chunks.join("\n"))
+}
+
+function findEndOfCentralDirectory(bytes: Uint8Array) {
+  for (let offset = bytes.length - 22; offset >= 0; offset -= 1) {
+    if (readUint32(bytes, offset) === 0x06054b50) {
+      return offset
+    }
+  }
+
+  return -1
+}
+
+function readZipEntries(bytes: Uint8Array): ZipEntry[] {
+  const endOffset = findEndOfCentralDirectory(bytes)
+
+  if (endOffset === -1) {
+    return []
+  }
+
+  const entryCount = readUint16(bytes, endOffset + 10)
+  let centralDirectoryOffset = readUint32(bytes, endOffset + 16)
+  const textDecoder = new TextDecoder()
+  const entries: ZipEntry[] = []
+
+  for (let index = 0; index < entryCount; index += 1) {
+    if (readUint32(bytes, centralDirectoryOffset) !== 0x02014b50) {
+      break
+    }
+
+    const compressionMethod = readUint16(bytes, centralDirectoryOffset + 10)
+    const compressedSize = readUint32(bytes, centralDirectoryOffset + 20)
+    const fileNameLength = readUint16(bytes, centralDirectoryOffset + 28)
+    const extraLength = readUint16(bytes, centralDirectoryOffset + 30)
+    const commentLength = readUint16(bytes, centralDirectoryOffset + 32)
+    const localHeaderOffset = readUint32(bytes, centralDirectoryOffset + 42)
+    const nameBytes = bytes.slice(centralDirectoryOffset + 46, centralDirectoryOffset + 46 + fileNameLength)
+    const name = textDecoder.decode(nameBytes)
+
+    entries.push({
+      name,
+      compressionMethod,
+      compressedSize,
+      localHeaderOffset,
+    })
+
+    centralDirectoryOffset += 46 + fileNameLength + extraLength + commentLength
+  }
+
+  return entries
+}
+
+async function inflateRawZipData(data: Uint8Array) {
+  const DecompressionStreamCtor = (globalThis as unknown as {
+    DecompressionStream?: DecompressionStreamConstructor
+  }).DecompressionStream
+
+  if (!DecompressionStreamCtor) {
+    throw new Error("Document decompression is not supported by this browser.")
+  }
+
+  const stream = new Blob([createArrayBufferBlobPart(data)]).stream().pipeThrough(new DecompressionStreamCtor("deflate-raw"))
+  return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+
+async function readZipEntry(bytes: Uint8Array, entry: ZipEntry) {
+  const localHeaderOffset = entry.localHeaderOffset
+
+  if (readUint32(bytes, localHeaderOffset) !== 0x04034b50) {
+    return new Uint8Array()
+  }
+
+  const fileNameLength = readUint16(bytes, localHeaderOffset + 26)
+  const extraLength = readUint16(bytes, localHeaderOffset + 28)
+  const dataOffset = localHeaderOffset + 30 + fileNameLength + extraLength
+  const compressedData = bytes.slice(dataOffset, dataOffset + entry.compressedSize)
+
+  if (entry.compressionMethod === 0) {
+    return compressedData
+  }
+
+  if (entry.compressionMethod === 8) {
+    return inflateRawZipData(compressedData)
+  }
+
+  throw new Error("Unsupported DOCX compression format.")
+}
+
+async function extractTextFromDocxBuffer(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer)
+  const entries = readZipEntries(bytes)
+  const documentEntry = entries.find((entry) => entry.name === "word/document.xml")
+
+  if (!documentEntry) {
+    throw new Error("Unable to read the DOCX document content.")
+  }
+
+  const xmlBytes = await readZipEntry(bytes, documentEntry)
+  const xml = new TextDecoder().decode(xmlBytes)
+  const paragraphs = xml.match(/<w:p[\s\S]*?<\/w:p>/g) ?? []
+  const lines = paragraphs
+    .map((paragraph) =>
+      Array.from(paragraph.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g))
+        .map((match) => decodeXmlEntities(match[1]))
+        .join(" ")
+        .trim(),
+    )
+    .filter(Boolean)
+
+  return normalizeDocumentText(lines.join("\n"))
+}
+
+function extractTextFromLegacyDocBuffer(buffer: ArrayBuffer) {
+  const raw = new TextDecoder("windows-1252").decode(buffer)
+  const textRuns = raw.match(/[A-Za-z0-9][\x20-\x7E\s]{18,}/g) ?? []
+
+  return normalizeDocumentText(textRuns.join("\n"))
+}
+
+async function extractSurveyDocumentText(file: File) {
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? ""
+
+  if (extension === "txt" || extension === "text" || file.type.startsWith("text/")) {
+    return normalizeDocumentText(await file.text())
+  }
+
+  const buffer = await file.arrayBuffer()
+
+  if (extension === "pdf" || file.type === "application/pdf") {
+    return extractTextFromPdfBuffer(buffer)
+  }
+
+  if (extension === "docx" || file.type.includes("wordprocessingml.document")) {
+    return extractTextFromDocxBuffer(buffer)
+  }
+
+  if (extension === "doc" || file.type.includes("msword")) {
+    return extractTextFromLegacyDocBuffer(buffer)
+  }
+
+  throw new Error("Please upload a PDF, DOCX, DOC, or TXT document.")
+}
+
+async function createSurveyDraftFromDocument(file: File): Promise<GeneratedSurveyDraft> {
+  const text = await extractSurveyDocumentText(file)
+
+  if (!text || text.length < 20) {
+    throw new Error("The uploaded document does not contain enough readable text to generate a survey.")
+  }
+
+  const sections = buildSurveySectionsFromText(text)
+  const itemCount = sections.reduce((total, section) => total + section.items.length, 0)
+
+  return {
+    fileName: file.name,
+    title: getReadableDocumentTitle(file.name, text),
+    description: createDocumentSurveyDescription(file.name),
+    sections,
+    sectionCount: sections.length,
+    itemCount,
+  }
+}
+
+function cloneGeneratedSectionsForStep(
+  sections: GeneratedSurveySections,
+  stepNumber: number,
+): GeneratedSurveySections {
+  return sections.map((section, sectionIndex) => {
+    const sectionCode = createCodeFromTitle(section.title, `document_section_${sectionIndex + 1}`)
+
+    return {
+      ...section,
+      code: `${sectionCode}_${stepNumber}`,
+      sortOrder: sectionIndex + 1,
+      items: section.items.map((item, itemIndex) => ({
+        ...item,
+        code: `${sectionCode}_${stepNumber}_item_${itemIndex + 1}`.slice(0, 60),
+        sortOrder: itemIndex + 1,
+        isRequired: item.isRequired ?? true,
+      })),
+    }
+  })
 }
 
 function getSurveyShareUrl(formCodes: string[]) {
@@ -161,6 +616,9 @@ export function Landing() {
   const [createMode, setCreateMode] = useState<"single" | "series">("single")
   const [createSurveyTitle, setCreateSurveyTitle] = useState("")
   const [createSurveyDescription, setCreateSurveyDescription] = useState("")
+  const [documentSurveyDraft, setDocumentSurveyDraft] = useState<GeneratedSurveyDraft | null>(null)
+  const [isReadingSurveyDocument, setIsReadingSurveyDocument] = useState(false)
+  const [documentReaderMessage, setDocumentReaderMessage] = useState("")
   const [surveyStepCount, setSurveyStepCount] = useState(2)
   const [respondentInformationRequired, setRespondentInformationRequired] = useState(true)
   const [isCreatingSurvey, setIsCreatingSurvey] = useState(false)
@@ -302,6 +760,41 @@ export function Landing() {
     navigate(`/survey?forms=${encodeURIComponent(codes.join(","))}`)
   }
 
+
+  async function handleSurveyDocumentUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+
+    if (!file) return
+
+    setIsReadingSurveyDocument(true)
+    setDocumentReaderMessage("Reading document and creating survey items...")
+
+    try {
+      const generatedDraft = await createSurveyDraftFromDocument(file)
+
+      setDocumentSurveyDraft(generatedDraft)
+      setCreateSurveyTitle((current) => current.trim() || generatedDraft.title)
+      setCreateSurveyDescription((current) => current.trim() || generatedDraft.description)
+      setDocumentReaderMessage(
+        `${generatedDraft.itemCount} survey item${generatedDraft.itemCount === 1 ? "" : "s"} generated from ${generatedDraft.fileName}.`,
+      )
+      toast.success("Survey items were generated from the uploaded document.")
+    } catch (error) {
+      const message = getErrorMessage(error)
+      setDocumentSurveyDraft(null)
+      setDocumentReaderMessage(message)
+      toast.error(message)
+    } finally {
+      setIsReadingSurveyDocument(false)
+    }
+  }
+
+  function clearDocumentSurveyDraft() {
+    setDocumentSurveyDraft(null)
+    setDocumentReaderMessage("")
+  }
+
   async function handleCreateSurveySeries() {
     const title = createSurveyTitle.trim()
 
@@ -314,6 +807,8 @@ export function Landing() {
     const timestamp = Date.now().toString(36)
     const baseCode = createCodeFromTitle(title, "custom_survey")
 
+    const generatedSections = documentSurveyDraft?.sections?.length ? documentSurveyDraft.sections : null
+
     const formsToCreate = Array.from({ length: stepCount }, (_, index) => {
       const stepNumber = index + 1
       const stepTitle = createMode === "series" ? `${title} - Survey ${stepNumber}` : title
@@ -321,14 +816,14 @@ export function Landing() {
       return {
         code: `${baseCode}_${timestamp}_${stepNumber}`,
         title: stepTitle,
-        description: createSurveyDescription.trim() || "Custom survey created by the researcher.",
+        description: createSurveyDescription.trim() || "Custom Chapter IV survey created by the researcher.",
         instruction: defaultSurveyInstruction,
         respondentInformationRequired,
         isActive: true,
         surveySeriesId: `${baseCode}_${timestamp}`,
         surveySeriesTitle: title,
         surveyStepNumber: stepNumber,
-        sections: getDefaultSections(stepNumber),
+        sections: generatedSections ? cloneGeneratedSectionsForStep(generatedSections, stepNumber) : getDefaultSections(stepNumber),
       } satisfies CreateSurveyFormPayload
     })
 
@@ -344,6 +839,8 @@ export function Landing() {
       toast.success(createMode === "series" ? "Survey series created successfully." : "Survey created successfully.")
       setCreateSurveyTitle("")
       setCreateSurveyDescription("")
+      setDocumentSurveyDraft(null)
+      setDocumentReaderMessage("")
       setSurveyStepCount(2)
       setRespondentInformationRequired(true)
       setIsCreateSurveyDialogOpen(false)
@@ -484,12 +981,12 @@ export function Landing() {
           <div className="min-w-0 space-y-6 sm:space-y-8">
             <div className="inline-flex w-full max-w-full items-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-medium text-cyan-100 wrap-anywhere sm:w-auto sm:max-w-none sm:rounded-full sm:px-4 sm:text-sm">
               <ShieldCheck className="size-4 shrink-0" />
-              Digital repository survey and statistical dashboard
+              Chapter IV survey data gathering and statistics
             </div>
 
             <div className="space-y-6">
               <h1 className="max-w-full text-2xl font-black tracking-tight text-white wrap-anywhere sm:max-w-4xl sm:text-5xl md:text-7xl">
-                Collect accreditation survey responses and evaluate results faster.
+                Create Chapter IV survey instruments and compute statistical results faster.
               </h1>
             </div>
 
@@ -545,8 +1042,8 @@ export function Landing() {
             <div className="min-w-0 rounded-2xl bg-slate-900 p-3 sm:p-5">
               <div className="mb-5 flex min-w-0 flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="min-w-0">
-                  <p className="text-sm text-slate-400">Survey Summary</p>
-                  <h2 className="mt-1 line-clamp-2 max-w-full text-lg font-bold wrap-anywhere sm:max-w-none sm:text-2xl">{highlightedSurvey?.title ?? "Active Survey Forms"}</h2>
+                  <p className="text-sm text-slate-400">Research Survey Summary</p>
+                  <h2 className="mt-1 line-clamp-2 max-w-full text-lg font-bold wrap-anywhere sm:max-w-none sm:text-2xl">{highlightedSurvey?.title ?? "Active Research Surveys"}</h2>
                 </div>
                 <div className="w-fit shrink-0 rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-300 sm:text-sm">
                   Live Data
@@ -816,9 +1313,75 @@ export function Landing() {
                 value={createSurveyDescription}
                 onChange={(event) => setCreateSurveyDescription(event.target.value)}
                 className="mt-2 min-h-28 w-full max-w-full resize-y rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10"
-                placeholder="Describe the purpose of the survey"
+                placeholder="Describe the research purpose of the survey"
               />
             </label>
+
+            <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4">
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Wand2 className="size-5 shrink-0 text-cyan-200" />
+                    <p className="wrap-break-word text-sm font-black text-cyan-50">PDF and document reader</p>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-300 wrap-anywhere">
+                    Upload a PDF, DOCX, DOC, or TXT file to automatically create survey sections and checklist items from the document text.
+                  </p>
+                </div>
+
+                {documentSurveyDraft ? (
+                  <button
+                    type="button"
+                    onClick={clearDocumentSurveyDraft}
+                    className="inline-flex w-full shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-200 transition hover:bg-white/10 sm:w-auto"
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+
+              <label className="mt-4 flex min-w-0 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-cyan-300/30 bg-slate-950/40 px-4 py-5 text-center transition hover:border-cyan-300/60 hover:bg-slate-950/70">
+                {isReadingSurveyDocument ? (
+                  <Loader2 className="size-6 animate-spin text-cyan-200" />
+                ) : (
+                  <Upload className="size-6 text-cyan-200" />
+                )}
+                <span className="wrap-break-word text-sm font-black text-white">
+                  {isReadingSurveyDocument ? "Reading document..." : "Upload document to generate survey"}
+                </span>
+                <span className="text-xs font-semibold text-slate-400">Accepted files: PDF, DOCX, DOC, TXT</span>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.txt,.text,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                  onChange={handleSurveyDocumentUpload}
+                  disabled={isReadingSurveyDocument}
+                  className="sr-only"
+                />
+              </label>
+
+              {documentReaderMessage ? (
+                <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm font-semibold leading-6 text-slate-200 wrap-anywhere">
+                  {documentReaderMessage}
+                </div>
+              ) : null}
+
+              {documentSurveyDraft ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-xs font-black uppercase tracking-wide text-slate-400">Source</p>
+                    <p className="mt-1 line-clamp-2 text-sm font-bold text-white wrap-anywhere">{documentSurveyDraft.fileName}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-xs font-black uppercase tracking-wide text-slate-400">Sections</p>
+                    <p className="mt-1 text-2xl font-black text-white">{documentSurveyDraft.sectionCount}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-xs font-black uppercase tracking-wide text-slate-400">Items</p>
+                    <p className="mt-1 text-2xl font-black text-white">{documentSurveyDraft.itemCount}</p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
 
             {createMode === "series" ? (
               <div className="min-w-0">

@@ -54,6 +54,7 @@ type StatisticsPreviewRow = {
   standardDeviation: number
   interpretation: string
   meanRange: string
+  solution: string
 }
 
 type CalculationStep = {
@@ -504,6 +505,19 @@ function createSectionCalculation(section: SurveySectionStatistics, items: Surve
   }
 }
 
+
+function formatCalculationStep(step: CalculationStep, index: number) {
+  return `Step ${index + 1}: ${step.label}. Formula: ${step.formula}. Substitution: ${step.substitution}. Result: ${step.result}.`
+}
+
+function formatCalculationSolution(steps: CalculationStep[]) {
+  return steps.map(formatCalculationStep).join("\n")
+}
+
+function createSectionSolutionText(section: SurveySectionStatistics, items: SurveyItemStatistics[]) {
+  return formatCalculationSolution(createSectionCalculation(section, items).steps)
+}
+
 function installPlotlyGlobalShim() {
   if (typeof globalThis === "undefined") return
 
@@ -732,14 +746,15 @@ export function Statistic() {
 
   const statisticsPreviewColumns = useMemo<PreviewColumn<StatisticsPreviewRow>[]>(
     () => [
-      { key: "sectionTitle", header: "Section" },
+      { key: "sectionTitle", header: "Result Area" },
       { key: "itemCode", header: "Code" },
-      { key: "itemStatement", header: "Checklist Item" },
+      { key: "itemStatement", header: "Mean Result" },
       { key: "count", header: "Answers" },
       { key: "weightedMean", header: "Weighted Mean" },
       { key: "standardDeviation", header: "Std. Dev." },
       { key: "interpretation", header: "Interpretation" },
       { key: "meanRange", header: "Mean Range" },
+      { key: "solution", header: "Solution" },
     ],
     [],
   )
@@ -765,7 +780,7 @@ export function Statistic() {
   const calculationPreviewRows = useMemo<StatisticsPreviewRow[]>(
     () =>
       calculationSteps.map((step, index) => ({
-        sectionTitle: "Detailed Solution",
+        sectionTitle: "Overall Solution",
         itemCode: `Step ${index + 1}`,
         itemStatement: `${step.label} · ${step.formula} · ${step.substitution}`,
         count: summary.answerCount,
@@ -773,22 +788,41 @@ export function Statistic() {
         standardDeviation: summary.standardDeviation,
         interpretation: step.result,
         meanRange: summary.meanRange,
+        solution: formatCalculationStep(step, index),
       })),
     [calculationSteps, summary],
   )
 
   const statisticsPreviewRows = useMemo<StatisticsPreviewRow[]>(
     () => {
-      const sectionRows = sectionStatistics.map((section) => ({
-        sectionTitle: section.sectionTitle,
-        itemCode: "Section Mean",
-        itemStatement: getSectionResultNarrative(section),
-        count: section.count,
-        weightedMean: section.weightedMean,
-        standardDeviation: section.standardDeviation,
-        interpretation: section.interpretation,
-        meanRange: section.meanRange,
-      }))
+      const overallSolution = formatCalculationSolution(calculationSteps)
+      const overallRow: StatisticsPreviewRow = {
+        sectionTitle: "Overall Mean and Solution",
+        itemCode: "Overall",
+        itemStatement: overallResultNarrative,
+        count: summary.answerCount,
+        weightedMean: summary.weightedMean,
+        standardDeviation: summary.standardDeviation,
+        interpretation: summary.interpretation,
+        meanRange: summary.meanRange,
+        solution: overallSolution,
+      }
+
+      const sectionRows = sectionStatistics.map((section) => {
+        const sectionItems = getSectionItemStatistics(section, itemStatistics)
+
+        return {
+          sectionTitle: section.sectionTitle,
+          itemCode: "Section Mean",
+          itemStatement: getSectionResultNarrative(section),
+          count: section.count,
+          weightedMean: section.weightedMean,
+          standardDeviation: section.standardDeviation,
+          interpretation: section.interpretation,
+          meanRange: section.meanRange,
+          solution: createSectionSolutionText(section, sectionItems),
+        }
+      })
 
       const itemRows = itemStatistics.map((item) => ({
         sectionTitle: item.sectionTitle,
@@ -799,11 +833,12 @@ export function Statistic() {
         standardDeviation: item.standardDeviation,
         interpretation: item.interpretation,
         meanRange: item.meanRange,
+        solution: `Item weighted mean ${formatNumber(item.weightedMean)} is interpreted as ${item.interpretation} (${item.meanRange}).`,
       }))
 
-      return sectionRows.length > 0 || itemRows.length > 0 ? [...sectionRows, ...itemRows] : calculationPreviewRows
+      return sectionRows.length > 0 || itemRows.length > 0 ? [overallRow, ...sectionRows, ...itemRows] : calculationPreviewRows
     },
-    [calculationPreviewRows, itemStatistics, sectionStatistics],
+    [calculationPreviewRows, calculationSteps, itemStatistics, overallResultNarrative, sectionStatistics, summary],
   )
 
   const sectionColumnDefs = useMemo<ColDef<SurveySectionStatistics>[]>(
@@ -1015,7 +1050,7 @@ export function Statistic() {
                 <div className="min-w-0">
                   <h1 className="wrap-break-word text-2xl font-black tracking-tight sm:text-3xl md:text-4xl">Survey Statistics</h1>
                   <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300 wrap-anywhere">
-                    Select one survey first, then compute combined online and hardcopy descriptive statistics with a detailed weighted-mean solution.
+                    Select one survey first, then compute combined online and hardcopy descriptive statistics with section means, overall mean, and detailed weighted-mean solution.
                   </p>
                 </div>
               </div>
@@ -1047,7 +1082,7 @@ export function Statistic() {
                 className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300 sm:px-5"
               >
                 <Eye className="size-4 shrink-0" />
-                <span className="truncate">Preview Result</span>
+                <span className="truncate">Preview Image Result</span>
               </button>
               <button
                 type="button"
@@ -1283,7 +1318,7 @@ export function Statistic() {
       <Preview
         isOpen={isPreviewOpen}
         title={`Statistics Preview · ${selectedFormTitle}`}
-        subtitle="Detailed statistical solution, result, and item-level statistics"
+        subtitle="Image export with overall mean, section means, detailed solutions, and item-level statistics"
         fileName={`${selectedFormCode || "statistics"}-survey-statistics`}
         summary={statisticsPreviewSummary}
         rows={statisticsPreviewRows}
@@ -1306,7 +1341,7 @@ export function Statistic() {
         </div>
 
         <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
-          <p className="text-sm font-black uppercase tracking-wide text-cyan-700">Detailed Solution</p>
+          <p className="text-sm font-black uppercase tracking-wide text-cyan-700">Overall Detailed Solution</p>
           <div className="mt-3 grid gap-3">
             {calculationSteps.map((step, index) => (
               <div key={`${step.label}-${index}`} className="rounded-xl bg-white p-3">
@@ -1324,6 +1359,34 @@ export function Statistic() {
             ))}
           </div>
         </div>
+
+        {sectionStatistics.length > 0 ? (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-black uppercase tracking-wide text-slate-600">Section Mean and Solution</p>
+            <div className="mt-3 grid gap-3">
+              {sectionStatistics.map((section) => {
+                const sectionItems = getSectionItemStatistics(section, itemStatistics)
+                const sectionSolution = createSectionCalculation(section, sectionItems)
+
+                return (
+                  <div key={section.sectionId} className="rounded-xl bg-white p-3">
+                    <p className="text-sm font-black text-slate-950 wrap-anywhere">{section.sectionTitle}</p>
+                    <p className="mt-1 text-sm font-semibold leading-6 text-slate-600 wrap-anywhere">
+                      Mean: {formatNumber(section.weightedMean)} · {section.interpretation} · {section.meanRange}
+                    </p>
+                    <div className="mt-2 grid gap-2">
+                      {sectionSolution.steps.map((step, index) => (
+                        <p key={`${section.sectionId}-${step.label}-${index}`} className="text-sm leading-6 text-slate-600 wrap-anywhere">
+                          <span className="font-bold">Step {index + 1}: {step.label}:</span> {step.formula} · {step.substitution} · {step.result}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ) : null}
       </Preview>
 
       <ManualHardcopyEntryDialog
