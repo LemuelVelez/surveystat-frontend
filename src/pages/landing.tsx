@@ -413,41 +413,6 @@ function buildSurveySectionsFromText(text: string): GeneratedSurveySections {
   return generatedSections.length > 0 ? generatedSections : createFallbackGeneratedSections()
 }
 
-function decodePdfLiteralString(value: string) {
-  return value
-    .replace(/\\([nrtbf()\\])/g, (_, escaped: string) => {
-      const map: Record<string, string> = {
-        n: "\n",
-        r: "\r",
-        t: "\t",
-        b: "\b",
-        f: "\f",
-        "(": "(",
-        ")": ")",
-        "\\": "\\",
-      }
-
-      return map[escaped] ?? escaped
-    })
-    .replace(/\\([0-7]{1,3})/g, (_, octal: string) => String.fromCharCode(Number.parseInt(octal, 8)))
-}
-
-function extractTextFromPdfBuffer(buffer: ArrayBuffer) {
-  const raw = new TextDecoder("windows-1252").decode(buffer)
-  const chunks: string[] = []
-
-  for (const match of raw.matchAll(/\((?:\\.|[^\\)]){3,}\)\s*(?:Tj|'|"|TJ)?/g)) {
-    const literal = match[0].replace(/\)\s*(?:Tj|'|"|TJ)?\s*$/, "")
-    const text = decodePdfLiteralString(literal.slice(1))
-
-    if (hasUsefulLetters(text)) {
-      chunks.push(text)
-    }
-  }
-
-  return normalizeDocumentText(chunks.join("\n"))
-}
-
 function findEndOfCentralDirectory(bytes: Uint8Array) {
   for (let offset = bytes.length - 22; offset >= 0; offset -= 1) {
     if (readUint32(bytes, offset) === 0x06054b50) {
@@ -573,10 +538,6 @@ async function extractSurveyDocumentText(file: File) {
 
   const buffer = await file.arrayBuffer()
 
-  if (extension === "pdf" || file.type === "application/pdf") {
-    return extractTextFromPdfBuffer(buffer)
-  }
-
   if (extension === "docx" || file.type.includes("wordprocessingml.document")) {
     return extractTextFromDocxBuffer(buffer)
   }
@@ -585,7 +546,7 @@ async function extractSurveyDocumentText(file: File) {
     return extractTextFromLegacyDocBuffer(buffer)
   }
 
-  throw new Error("Please upload a PDF, DOCX, DOC, or TXT document.")
+  throw new Error("Please upload a DOCX, DOC, or TXT document.")
 }
 
 async function createSurveyDraftFromDocument(file: File): Promise<GeneratedSurveyDraft> {
@@ -922,6 +883,9 @@ export function Landing() {
   function clearDocumentSurveyDraft() {
     setDocumentSurveyDraft(null)
     setDocumentReaderMessage("")
+    setIsSurveyDocumentDragActive(false)
+    setCreateSurveyTitle("")
+    setCreateSurveyDescription("")
   }
 
   function updateDocumentSurveySections(updater: (sections: GeneratedSurveySections) => GeneratedSurveySections) {
@@ -1611,20 +1575,21 @@ export function Landing() {
                 <div className="min-w-0">
                   <div className="flex min-w-0 items-center gap-2">
                     <Wand2 className="size-5 shrink-0 text-cyan-200" />
-                    <p className="wrap-break-word text-sm font-black text-cyan-50">PDF and document reader</p>
+                    <p className="wrap-break-word text-sm font-black text-cyan-50">Document and text reader</p>
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-300 wrap-anywhere">
-                    Upload a PDF, DOCX, DOC, or TXT file to automatically create survey sections and checklist items from the document text.
+                    Upload a DOCX, DOC, or TXT file to automatically create survey sections and checklist items from the document text.
                   </p>
                 </div>
 
-                {documentSurveyDraft ? (
+                {documentSurveyDraft || documentReaderMessage ? (
                   <button
                     type="button"
                     onClick={clearDocumentSurveyDraft}
-                    className="inline-flex w-full shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-200 transition hover:bg-white/10 sm:w-auto"
+                    className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-200 transition hover:bg-white/10 sm:w-auto"
                   >
-                    Clear
+                    <Trash2 className="size-3.5" />
+                    Clear Uploaded Document
                   </button>
                 ) : null}
               </div>
@@ -1652,10 +1617,10 @@ export function Landing() {
                       ? "Drop document to generate survey"
                       : "Drag and drop document here or click to upload"}
                 </span>
-                <span className="text-xs font-semibold text-slate-400">Accepted files: PDF, DOCX, DOC, TXT</span>
+                <span className="text-xs font-semibold text-slate-400">Accepted files: DOCX, DOC, TXT</span>
                 <input
                   type="file"
-                  accept=".pdf,.doc,.docx,.txt,.text,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                  accept=".doc,.docx,.txt,.text,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
                   onChange={handleSurveyDocumentUpload}
                   disabled={isReadingSurveyDocument}
                   className="sr-only"
