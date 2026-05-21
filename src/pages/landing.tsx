@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react"
 import {
+  ArrowDown,
+  ArrowUp,
   ArrowUpRight,
   BarChart3,
   CheckCircle2,
@@ -14,6 +16,7 @@ import {
   Menu,
   Plus,
   ShieldCheck,
+  Trash2,
   Upload,
   UsersRound,
   Wand2,
@@ -241,6 +244,78 @@ function createFallbackGeneratedSections(): GeneratedSurveySections {
       })),
     },
   ]
+}
+
+function getGeneratedSurveyTotals(sections: GeneratedSurveySections) {
+  return {
+    sectionCount: sections.length,
+    itemCount: sections.reduce((total, section) => total + section.items.length, 0),
+  }
+}
+
+function withGeneratedSurveySortOrder(sections: GeneratedSurveySections): GeneratedSurveySections {
+  return sections.map((section, sectionIndex) => {
+    const sectionTitle = section.title
+    const sectionCode = createCodeFromTitle(section.code || sectionTitle || `section_${sectionIndex + 1}`, `section_${sectionIndex + 1}`)
+
+    return {
+      ...section,
+      code: sectionCode,
+      title: sectionTitle,
+      sortOrder: sectionIndex + 1,
+      items: section.items.map((item, itemIndex) => ({
+        ...item,
+        code: createGeneratedItemCode(sectionCode, itemIndex),
+        sortOrder: itemIndex + 1,
+        isRequired: item.isRequired ?? true,
+      })),
+    }
+  })
+}
+
+function refreshGeneratedSurveyDraft(
+  draft: GeneratedSurveyDraft,
+  sections: GeneratedSurveySections,
+): GeneratedSurveyDraft {
+  const sortedSections = withGeneratedSurveySortOrder(sections)
+  const totals = getGeneratedSurveyTotals(sortedSections)
+
+  return {
+    ...draft,
+    sections: sortedSections,
+    ...totals,
+  }
+}
+
+function getCleanGeneratedSectionsForCreate(sections: GeneratedSurveySections): GeneratedSurveySections {
+  const cleanedSections = sections
+    .map((section, sectionIndex) => {
+      const sectionTitle = section.title.trim() || `Survey Section ${sectionIndex + 1}`
+      const sectionCode = createGeneratedSectionCode(sectionTitle, sectionIndex)
+      const cleanedItems = section.items
+        .map((item) => ({
+          ...item,
+          statement: item.statement.trim(),
+        }))
+        .filter((item) => item.statement.length > 0)
+        .map((item, itemIndex) => ({
+          ...item,
+          code: createGeneratedItemCode(sectionCode, itemIndex),
+          sortOrder: itemIndex + 1,
+          isRequired: item.isRequired ?? true,
+        }))
+
+      return {
+        ...section,
+        code: sectionCode,
+        title: sectionTitle,
+        sortOrder: sectionIndex + 1,
+        items: cleanedItems,
+      }
+    })
+    .filter((section) => section.items.length > 0)
+
+  return withGeneratedSurveySortOrder(cleanedSections)
 }
 
 function buildSurveySectionsFromText(text: string): GeneratedSurveySections {
@@ -521,15 +596,14 @@ async function createSurveyDraftFromDocument(file: File): Promise<GeneratedSurve
   }
 
   const sections = buildSurveySectionsFromText(text)
-  const itemCount = sections.reduce((total, section) => total + section.items.length, 0)
+  const totals = getGeneratedSurveyTotals(sections)
 
   return {
     fileName: file.name,
     title: getReadableDocumentTitle(file.name, text),
     description: createDocumentSurveyDescription(file.name),
     sections,
-    sectionCount: sections.length,
-    itemCount,
+    ...totals,
   }
 }
 
@@ -795,6 +869,159 @@ export function Landing() {
     setDocumentReaderMessage("")
   }
 
+  function updateDocumentSurveySections(updater: (sections: GeneratedSurveySections) => GeneratedSurveySections) {
+    setDocumentSurveyDraft((current) => {
+      if (!current) return current
+
+      return refreshGeneratedSurveyDraft(current, updater(current.sections))
+    })
+  }
+
+  function updateGeneratedSectionTitle(sectionIndex: number, title: string) {
+    updateDocumentSurveySections((sections) =>
+      sections.map((section, currentIndex) => (currentIndex === sectionIndex ? { ...section, title } : section)),
+    )
+  }
+
+  function addGeneratedSection() {
+    updateDocumentSurveySections((sections) => {
+      const nextSectionNumber = sections.length + 1
+      const sectionCode = `custom_section_${nextSectionNumber}`
+
+      return [
+        ...sections,
+        {
+          code: sectionCode,
+          title: `Survey Section ${nextSectionNumber}`,
+          sortOrder: nextSectionNumber,
+          items: [
+            {
+              code: `${sectionCode}_item_1`,
+              statement: "New survey checklist item.",
+              sortOrder: 1,
+              isRequired: true,
+            },
+          ],
+        },
+      ]
+    })
+  }
+
+  function removeGeneratedSection(sectionIndex: number) {
+    updateDocumentSurveySections((sections) => {
+      if (sections.length <= 1) return sections
+
+      return sections.filter((_, currentIndex) => currentIndex !== sectionIndex)
+    })
+  }
+
+  function moveGeneratedSection(sectionIndex: number, direction: -1 | 1) {
+    updateDocumentSurveySections((sections) => {
+      const targetIndex = sectionIndex + direction
+
+      if (targetIndex < 0 || targetIndex >= sections.length) {
+        return sections
+      }
+
+      const nextSections = [...sections]
+      const currentSection = nextSections[sectionIndex]
+      nextSections[sectionIndex] = nextSections[targetIndex]
+      nextSections[targetIndex] = currentSection
+
+      return nextSections
+    })
+  }
+
+  function updateGeneratedItemStatement(sectionIndex: number, itemIndex: number, statement: string) {
+    updateDocumentSurveySections((sections) =>
+      sections.map((section, currentSectionIndex) => {
+        if (currentSectionIndex !== sectionIndex) return section
+
+        return {
+          ...section,
+          items: section.items.map((item, currentItemIndex) =>
+            currentItemIndex === itemIndex ? { ...item, statement } : item,
+          ),
+        }
+      }),
+    )
+  }
+
+  function toggleGeneratedItemRequired(sectionIndex: number, itemIndex: number) {
+    updateDocumentSurveySections((sections) =>
+      sections.map((section, currentSectionIndex) => {
+        if (currentSectionIndex !== sectionIndex) return section
+
+        return {
+          ...section,
+          items: section.items.map((item, currentItemIndex) =>
+            currentItemIndex === itemIndex ? { ...item, isRequired: !(item.isRequired ?? true) } : item,
+          ),
+        }
+      }),
+    )
+  }
+
+  function addGeneratedItem(sectionIndex: number) {
+    updateDocumentSurveySections((sections) =>
+      sections.map((section, currentSectionIndex) => {
+        if (currentSectionIndex !== sectionIndex) return section
+
+        const nextItemNumber = section.items.length + 1
+
+        return {
+          ...section,
+          items: [
+            ...section.items,
+            {
+              code: `${section.code}_item_${nextItemNumber}`.slice(0, 60),
+              statement: "New survey checklist item.",
+              sortOrder: nextItemNumber,
+              isRequired: true,
+            },
+          ],
+        }
+      }),
+    )
+  }
+
+  function removeGeneratedItem(sectionIndex: number, itemIndex: number) {
+    updateDocumentSurveySections((sections) =>
+      sections.map((section, currentSectionIndex) => {
+        if (currentSectionIndex !== sectionIndex || section.items.length <= 1) return section
+
+        return {
+          ...section,
+          items: section.items.filter((_, currentItemIndex) => currentItemIndex !== itemIndex),
+        }
+      }),
+    )
+  }
+
+  function moveGeneratedItem(sectionIndex: number, itemIndex: number, direction: -1 | 1) {
+    updateDocumentSurveySections((sections) =>
+      sections.map((section, currentSectionIndex) => {
+        if (currentSectionIndex !== sectionIndex) return section
+
+        const targetIndex = itemIndex + direction
+
+        if (targetIndex < 0 || targetIndex >= section.items.length) {
+          return section
+        }
+
+        const nextItems = [...section.items]
+        const currentItem = nextItems[itemIndex]
+        nextItems[itemIndex] = nextItems[targetIndex]
+        nextItems[targetIndex] = currentItem
+
+        return {
+          ...section,
+          items: nextItems,
+        }
+      }),
+    )
+  }
+
   async function handleCreateSurveySeries() {
     const title = createSurveyTitle.trim()
 
@@ -807,7 +1034,14 @@ export function Landing() {
     const timestamp = Date.now().toString(36)
     const baseCode = createCodeFromTitle(title, "custom_survey")
 
-    const generatedSections = documentSurveyDraft?.sections?.length ? documentSurveyDraft.sections : null
+    const generatedSections = documentSurveyDraft?.sections?.length
+      ? getCleanGeneratedSectionsForCreate(documentSurveyDraft.sections)
+      : null
+
+    if (documentSurveyDraft && (!generatedSections || generatedSections.length === 0)) {
+      toast.error("Please keep at least one survey item before creating the survey.")
+      return
+    }
 
     const formsToCreate = Array.from({ length: stepCount }, (_, index) => {
       const stepNumber = index + 1
@@ -1366,18 +1600,187 @@ export function Landing() {
               ) : null}
 
               {documentSurveyDraft ? (
-                <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                    <p className="text-xs font-black uppercase tracking-wide text-slate-400">Source</p>
-                    <p className="mt-1 line-clamp-2 text-sm font-bold text-white wrap-anywhere">{documentSurveyDraft.fileName}</p>
+                <div className="mt-4 space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <p className="text-xs font-black uppercase tracking-wide text-slate-400">Source</p>
+                      <p className="mt-1 line-clamp-2 text-sm font-bold text-white wrap-anywhere">{documentSurveyDraft.fileName}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <p className="text-xs font-black uppercase tracking-wide text-slate-400">Sections</p>
+                      <p className="mt-1 text-2xl font-black text-white">{documentSurveyDraft.sectionCount}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <p className="text-xs font-black uppercase tracking-wide text-slate-400">Items</p>
+                      <p className="mt-1 text-2xl font-black text-white">{documentSurveyDraft.itemCount}</p>
+                    </div>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                    <p className="text-xs font-black uppercase tracking-wide text-slate-400">Sections</p>
-                    <p className="mt-1 text-2xl font-black text-white">{documentSurveyDraft.sectionCount}</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                    <p className="text-xs font-black uppercase tracking-wide text-slate-400">Items</p>
-                    <p className="mt-1 text-2xl font-black text-white">{documentSurveyDraft.itemCount}</p>
+
+                  <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 sm:p-4">
+                    <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-white">Survey preview and editor</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-300 wrap-anywhere">
+                          Edit sections, rewrite checklist items, remove items, and arrange the order before creating the survey.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addGeneratedSection}
+                        className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full bg-cyan-400 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-950 transition hover:bg-cyan-300 sm:w-auto"
+                      >
+                        <Plus className="size-3.5" />
+                        Add Section
+                      </button>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3 text-slate-950 sm:p-4">
+                      <p className="text-xs font-black uppercase tracking-wide text-cyan-700">Preview</p>
+                      <h3 className="mt-2 text-lg font-black leading-7 wrap-anywhere sm:text-2xl">
+                        {createSurveyTitle.trim() || documentSurveyDraft.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-6 text-slate-600 wrap-anywhere">
+                        {createSurveyDescription.trim() || documentSurveyDraft.description}
+                      </p>
+                      <p className="mt-4 rounded-2xl bg-slate-100 p-3 text-sm font-semibold leading-6 text-slate-700">
+                        {defaultSurveyInstruction}
+                      </p>
+
+                      <div className="mt-4 grid grid-cols-5 gap-2 rounded-2xl bg-slate-950 p-2 text-center text-xs font-black text-white">
+                        {[5, 4, 3, 2, 1].map((value) => (
+                          <span key={value} className="rounded-xl bg-white/10 px-2 py-2">
+                            {value}
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="mt-4 space-y-4">
+                        {documentSurveyDraft.sections.map((section, sectionIndex) => (
+                          <section key={`${section.code}-${sectionIndex}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+                            <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                              <label className="block min-w-0 flex-1">
+                                <span className="text-xs font-black uppercase tracking-wide text-slate-500">Section {sectionIndex + 1}</span>
+                                <input
+                                  value={section.title}
+                                  onChange={(event) => updateGeneratedSectionTitle(sectionIndex, event.target.value)}
+                                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+                                  placeholder="Section title"
+                                />
+                              </label>
+
+                              <div className="grid grid-cols-3 gap-2 sm:flex sm:shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => moveGeneratedSection(sectionIndex, -1)}
+                                  disabled={sectionIndex === 0}
+                                  className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                  aria-label="Move section up"
+                                >
+                                  <ArrowUp className="size-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveGeneratedSection(sectionIndex, 1)}
+                                  disabled={sectionIndex === documentSurveyDraft.sections.length - 1}
+                                  className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                  aria-label="Move section down"
+                                >
+                                  <ArrowDown className="size-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeGeneratedSection(sectionIndex)}
+                                  disabled={documentSurveyDraft.sections.length <= 1}
+                                  className="inline-flex items-center justify-center rounded-xl border border-red-100 bg-red-50 p-2 text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                  aria-label="Remove section"
+                                >
+                                  <Trash2 className="size-4" />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 space-y-3">
+                              {section.items.map((item, itemIndex) => (
+                                <div key={`${item.code}-${itemIndex}`} className="rounded-2xl border border-slate-200 bg-white p-3">
+                                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+                                      Item {itemIndex + 1}
+                                    </p>
+                                    <div className="grid grid-cols-3 gap-2 sm:flex sm:shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => moveGeneratedItem(sectionIndex, itemIndex, -1)}
+                                        disabled={itemIndex === 0}
+                                        className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                        aria-label="Move item up"
+                                      >
+                                        <ArrowUp className="size-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => moveGeneratedItem(sectionIndex, itemIndex, 1)}
+                                        disabled={itemIndex === section.items.length - 1}
+                                        className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 p-2 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                        aria-label="Move item down"
+                                      >
+                                        <ArrowDown className="size-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeGeneratedItem(sectionIndex, itemIndex)}
+                                        disabled={section.items.length <= 1}
+                                        className="inline-flex items-center justify-center rounded-xl border border-red-100 bg-red-50 p-2 text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                        aria-label="Remove item"
+                                      >
+                                        <Trash2 className="size-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <textarea
+                                    value={item.statement}
+                                    onChange={(event) => updateGeneratedItemStatement(sectionIndex, itemIndex, event.target.value)}
+                                    className="mt-2 min-h-20 w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+                                    placeholder="Survey checklist statement"
+                                  />
+
+                                  <div className="mt-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleGeneratedItemRequired(sectionIndex, itemIndex)}
+                                      className={`inline-flex w-full items-center justify-center rounded-full px-3 py-2 text-xs font-black uppercase tracking-wide transition sm:w-auto ${
+                                        (item.isRequired ?? true)
+                                          ? "bg-cyan-100 text-cyan-700 hover:bg-cyan-200"
+                                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                      }`}
+                                    >
+                                      {(item.isRequired ?? true) ? "Required" : "Optional"}
+                                    </button>
+
+                                    <div className="grid grid-cols-5 gap-1 sm:w-60">
+                                      {[5, 4, 3, 2, 1].map((value) => (
+                                        <span key={value} className="flex size-8 items-center justify-center rounded-full bg-slate-100 text-xs font-black text-slate-600">
+                                          {value}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => addGeneratedItem(sectionIndex)}
+                              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-100"
+                            >
+                              <Plus className="size-4" />
+                              Add Item
+                            </button>
+                          </section>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : null}
