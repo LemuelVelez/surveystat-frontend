@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react"
 import {
   ArrowDown,
   ArrowUp,
@@ -692,6 +692,7 @@ export function Landing() {
   const [createSurveyDescription, setCreateSurveyDescription] = useState("")
   const [documentSurveyDraft, setDocumentSurveyDraft] = useState<GeneratedSurveyDraft | null>(null)
   const [isReadingSurveyDocument, setIsReadingSurveyDocument] = useState(false)
+  const [isSurveyDocumentDragActive, setIsSurveyDocumentDragActive] = useState(false)
   const [documentReaderMessage, setDocumentReaderMessage] = useState("")
   const [surveyStepCount, setSurveyStepCount] = useState(2)
   const [respondentInformationRequired, setRespondentInformationRequired] = useState(true)
@@ -835,12 +836,7 @@ export function Landing() {
   }
 
 
-  async function handleSurveyDocumentUpload(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ""
-
-    if (!file) return
-
+  async function readSurveyDocumentFile(file: File) {
     setIsReadingSurveyDocument(true)
     setDocumentReaderMessage("Reading document and creating survey items...")
 
@@ -862,6 +858,65 @@ export function Landing() {
     } finally {
       setIsReadingSurveyDocument(false)
     }
+  }
+
+  async function handleSurveyDocumentUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+
+    if (!file) return
+
+    await readSurveyDocumentFile(file)
+  }
+
+  function handleSurveyDocumentDragEnter(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (isReadingSurveyDocument) return
+
+    event.dataTransfer.dropEffect = "copy"
+    setIsSurveyDocumentDragActive(true)
+  }
+
+  function handleSurveyDocumentDragOver(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (isReadingSurveyDocument) {
+      event.dataTransfer.dropEffect = "none"
+      return
+    }
+
+    event.dataTransfer.dropEffect = "copy"
+    setIsSurveyDocumentDragActive(true)
+  }
+
+  function handleSurveyDocumentDragLeave(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+
+    const nextTarget = event.relatedTarget
+
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return
+    }
+
+    setIsSurveyDocumentDragActive(false)
+  }
+
+  async function handleSurveyDocumentDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsSurveyDocumentDragActive(false)
+
+    if (isReadingSurveyDocument) return
+
+    const file = event.dataTransfer.files?.[0]
+
+    if (!file) return
+
+    await readSurveyDocumentFile(file)
   }
 
   function clearDocumentSurveyDraft() {
@@ -1574,14 +1629,28 @@ export function Landing() {
                 ) : null}
               </div>
 
-              <label className="mt-4 flex min-w-0 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-cyan-300/30 bg-slate-950/40 px-4 py-5 text-center transition hover:border-cyan-300/60 hover:bg-slate-950/70">
+              <label
+                onDragEnter={handleSurveyDocumentDragEnter}
+                onDragOver={handleSurveyDocumentDragOver}
+                onDragLeave={handleSurveyDocumentDragLeave}
+                onDrop={handleSurveyDocumentDrop}
+                className={`mt-4 flex min-w-0 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed px-4 py-5 text-center transition ${
+                  isSurveyDocumentDragActive
+                    ? "border-cyan-200 bg-cyan-300/15 ring-4 ring-cyan-300/10"
+                    : "border-cyan-300/30 bg-slate-950/40 hover:border-cyan-300/60 hover:bg-slate-950/70"
+                } ${isReadingSurveyDocument ? "cursor-not-allowed opacity-80" : "cursor-pointer"}`}
+              >
                 {isReadingSurveyDocument ? (
                   <Loader2 className="size-6 animate-spin text-cyan-200" />
                 ) : (
                   <Upload className="size-6 text-cyan-200" />
                 )}
                 <span className="wrap-break-word text-sm font-black text-white">
-                  {isReadingSurveyDocument ? "Reading document..." : "Upload document to generate survey"}
+                  {isReadingSurveyDocument
+                    ? "Reading document..."
+                    : isSurveyDocumentDragActive
+                      ? "Drop document to generate survey"
+                      : "Drag and drop document here or click to upload"}
                 </span>
                 <span className="text-xs font-semibold text-slate-400">Accepted files: PDF, DOCX, DOC, TXT</span>
                 <input
