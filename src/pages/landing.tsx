@@ -89,15 +89,25 @@ function createCodeFromTitle(title: string, fallback: string) {
   return (code || fallback).slice(0, 40)
 }
 
-function getDefaultSections(stepNumber: number): CreateSurveyFormPayload["sections"] {
+function createSurveyScopedCode(scopeCode: string, label: string, fallback: string, maximumLength = 60) {
+  const cleanScopeCode = createCodeFromTitle(scopeCode, "survey").slice(0, 36).replace(/_+$/g, "")
+  const cleanLabel = createCodeFromTitle(label, fallback).replace(/_+$/g, "")
+  const code = `${cleanScopeCode}_${cleanLabel}`.replace(/_+/g, "_").replace(/^_+|_+$/g, "")
+
+  return (code || fallback).slice(0, maximumLength).replace(/_+$/g, "")
+}
+
+function getDefaultSections(stepNumber: number, formCode: string): CreateSurveyFormPayload["sections"] {
+  const sectionCode = createSurveyScopedCode(formCode, `section_${stepNumber}_1`, `survey_${stepNumber}_section_1`)
+
   return [
     {
-      code: `survey_${stepNumber}_section_1`,
+      code: sectionCode,
       title: "Chapter IV Survey Items",
       sortOrder: 1,
       items: [
         {
-          code: `survey_${stepNumber}_item_1`,
+          code: createSurveyScopedCode(sectionCode, "item_1", `survey_${stepNumber}_item_1`),
           statement: "Replace this sample checklist item with the actual Chapter IV survey indicator.",
           sortOrder: 1,
           isRequired: true,
@@ -347,6 +357,27 @@ function getExistingSurveyEditTotals(sections: EditableExistingSurveySections) {
     sectionCount: sections.length,
     itemCount: sections.reduce((total, section) => total + section.items.length, 0),
   }
+}
+
+function cloneExistingSurveySectionsForDraft(sections: SurveyQuestionnaireSection[]): GeneratedSurveySections {
+  return withGeneratedSurveySortOrder(
+    sections.map((section, sectionIndex) => {
+      const sectionTitle = section.title.trim() || `Survey Section ${sectionIndex + 1}`
+      const sectionCode = createGeneratedSectionCode(sectionTitle, sectionIndex)
+
+      return {
+        code: sectionCode,
+        title: sectionTitle,
+        sortOrder: sectionIndex + 1,
+        items: section.items.map((item, itemIndex) => ({
+          code: createGeneratedItemCode(sectionCode, itemIndex),
+          statement: item.statement,
+          sortOrder: itemIndex + 1,
+          isRequired: item.isRequired ?? true,
+        })),
+      }
+    }),
+  )
 }
 
 function withExistingSurveySortOrder(sections: EditableExistingSurveySections): EditableExistingSurveySections {
@@ -655,17 +686,22 @@ async function createSurveyDraftFromDocument(file: File): Promise<GeneratedSurve
 function cloneGeneratedSectionsForStep(
   sections: GeneratedSurveySections,
   stepNumber: number,
+  formCode: string,
 ): GeneratedSurveySections {
   return sections.map((section, sectionIndex) => {
-    const sectionCode = createCodeFromTitle(section.title, `document_section_${sectionIndex + 1}`)
+    const sectionCode = createSurveyScopedCode(
+      formCode,
+      `${section.title || section.code || "section"}_${sectionIndex + 1}`,
+      `document_section_${sectionIndex + 1}`,
+    )
 
     return {
       ...section,
-      code: `${sectionCode}_${stepNumber}`,
+      code: sectionCode,
       sortOrder: sectionIndex + 1,
       items: section.items.map((item, itemIndex) => ({
         ...item,
-        code: `${sectionCode}_${stepNumber}_item_${itemIndex + 1}`.slice(0, 60),
+        code: createSurveyScopedCode(sectionCode, `step_${stepNumber}_item_${itemIndex + 1}`, `item_${itemIndex + 1}`),
         sortOrder: itemIndex + 1,
         isRequired: item.isRequired ?? true,
       })),
@@ -742,6 +778,7 @@ export function Landing() {
   const [isLoadingEditSurvey, setIsLoadingEditSurvey] = useState(false)
   const [isUpdatingSurvey, setIsUpdatingSurvey] = useState(false)
   const [deletingSurveyFormId, setDeletingSurveyFormId] = useState<string | null>(null)
+  const [duplicatingSurveyFormId, setDuplicatingSurveyFormId] = useState<string | null>(null)
   const [documentSurveyDraft, setDocumentSurveyDraft] = useState<GeneratedSurveyDraft | null>(null)
   const [isReadingSurveyDocument, setIsReadingSurveyDocument] = useState(false)
   const [isSurveyDocumentDragActive, setIsSurveyDocumentDragActive] = useState(false)
@@ -829,6 +866,18 @@ export function Landing() {
     setIsExistingSurveysDialogOpen(true)
   }
 
+  function openBlankCreateSurveyDialog() {
+    setCreateMode("single")
+    setCreateSurveyTitle("")
+    setCreateSurveyDescription("")
+    setDocumentSurveyDraft(null)
+    setDocumentReaderMessage("")
+    setSurveyStepCount(2)
+    setRespondentInformationRequired(true)
+    setIsSurveyDocumentDragActive(false)
+    setIsCreateSurveyDialogOpen(true)
+  }
+
   function closeMobileNavigation() {
     setIsMobileNavigationOpen(false)
   }
@@ -877,6 +926,41 @@ export function Landing() {
       toast.error(getErrorMessage(error))
     } finally {
       setIsLoadingEditSurvey(false)
+    }
+  }
+
+  async function openDuplicateExistingSurvey(form: SurveyForm) {
+    setDuplicatingSurveyFormId(form.id)
+
+    try {
+      const questionnaire = await surveyStatService.getQuestionnaireByFormId(form.id)
+      const sections = cloneExistingSurveySectionsForDraft(questionnaire.sections)
+      const totals = getGeneratedSurveyTotals(sections)
+      const duplicateTitle = `Copy of ${questionnaire.title}`
+      const duplicateDescription = questionnaire.description?.trim() || "Custom Chapter IV survey created from an existing survey."
+
+      setCreateMode("single")
+      setCreateSurveyTitle(duplicateTitle)
+      setCreateSurveyDescription(duplicateDescription)
+      setSurveyStepCount(2)
+      setRespondentInformationRequired(questionnaire.respondentInformationRequired)
+      setDocumentSurveyDraft({
+        fileName: questionnaire.title,
+        title: duplicateTitle,
+        description: duplicateDescription,
+        sections,
+        ...totals,
+      })
+      setDocumentReaderMessage(
+        `${totals.itemCount} survey item${totals.itemCount === 1 ? "" : "s"} copied from ${questionnaire.title}.`,
+      )
+      setIsExistingSurveysDialogOpen(false)
+      setIsCreateSurveyDialogOpen(true)
+      toast.success("Survey copied. Review and modify it before creating the new survey.")
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setDuplicatingSurveyFormId(null)
     }
   }
 
@@ -1401,7 +1485,8 @@ export function Landing() {
 
     const stepCount = createMode === "series" ? Math.max(2, Math.min(surveyStepCount, 10)) : 1
     const timestamp = Date.now().toString(36)
-    const baseCode = createCodeFromTitle(title, "custom_survey")
+    const baseCode = createCodeFromTitle(title, "custom_survey").slice(0, 24).replace(/_+$/g, "") || "custom_survey"
+    const surveySeriesId = `${baseCode}_${timestamp}`
 
     const generatedSections = documentSurveyDraft?.sections?.length
       ? getCleanGeneratedSectionsForCreate(documentSurveyDraft.sections)
@@ -1415,18 +1500,21 @@ export function Landing() {
     const formsToCreate = Array.from({ length: stepCount }, (_, index) => {
       const stepNumber = index + 1
       const stepTitle = createMode === "series" ? `${title} - Survey ${stepNumber}` : title
+      const formCode = `${surveySeriesId}_${stepNumber}`
 
       return {
-        code: `${baseCode}_${timestamp}_${stepNumber}`,
+        code: formCode,
         title: stepTitle,
         description: createSurveyDescription.trim() || "Custom Chapter IV survey created by the researcher.",
         instruction: defaultSurveyInstruction,
         respondentInformationRequired,
         isActive: true,
-        surveySeriesId: `${baseCode}_${timestamp}`,
+        surveySeriesId,
         surveySeriesTitle: title,
         surveyStepNumber: stepNumber,
-        sections: generatedSections ? cloneGeneratedSectionsForStep(generatedSections, stepNumber) : getDefaultSections(stepNumber),
+        sections: generatedSections
+          ? cloneGeneratedSectionsForStep(generatedSections, stepNumber, formCode)
+          : getDefaultSections(stepNumber, formCode),
       } satisfies CreateSurveyFormPayload
     })
 
@@ -1435,7 +1523,7 @@ export function Landing() {
     try {
       const createdForms = await surveyStatService.createSurveySeries({
         surveySeriesTitle: title,
-        surveySeriesId: `${baseCode}_${timestamp}`,
+        surveySeriesId,
         forms: formsToCreate,
       })
 
@@ -1493,7 +1581,7 @@ export function Landing() {
             </button>
             <button
               type="button"
-              onClick={() => setIsCreateSurveyDialogOpen(true)}
+              onClick={openBlankCreateSurveyDialog}
               className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm font-bold text-cyan-100 transition hover:bg-cyan-300/20"
             >
               <Plus className="size-4" />
@@ -1543,7 +1631,7 @@ export function Landing() {
               type="button"
               onClick={() => {
                 closeMobileNavigation()
-                setIsCreateSurveyDialogOpen(true)
+                openBlankCreateSurveyDialog()
               }}
               className="inline-flex min-w-0 items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-3 py-3 text-xs font-bold text-slate-950 sm:px-4 sm:text-sm"
             >
@@ -1625,7 +1713,7 @@ export function Landing() {
               </button>
               <button
                 type="button"
-                onClick={() => setIsCreateSurveyDialogOpen(true)}
+                onClick={openBlankCreateSurveyDialog}
                 className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-3 py-3 text-xs font-bold text-white transition hover:bg-white/10 sm:w-auto sm:px-6 sm:text-sm"
               >
                 <FilePlus2 className="size-4" />
@@ -1785,6 +1873,7 @@ export function Landing() {
               const isSelected = selectedSurveyCodes.includes(form.code)
               const isUpdatingRespondentInfo = updatingRespondentInfoFormId === form.id
               const isDeletingSurvey = deletingSurveyFormId === form.id
+              const isDuplicatingSurvey = duplicatingSurveyFormId === form.id
 
               return (
                 <div
@@ -1827,6 +1916,15 @@ export function Landing() {
                       >
                         <Pencil className="size-3.5 shrink-0" />
                         <span className="truncate">Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openDuplicateExistingSurvey(form)}
+                        disabled={isDuplicatingSurvey}
+                        className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-full bg-emerald-400/10 px-3 py-2 text-xs font-black uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                      >
+                        {isDuplicatingSurvey ? <Loader2 className="size-3.5 shrink-0 animate-spin" /> : <Copy className="size-3.5 shrink-0" />}
+                        <span className="truncate">{isDuplicatingSurvey ? "Copying" : "Duplicate"}</span>
                       </button>
                       <button
                         type="button"
@@ -2157,7 +2255,7 @@ export function Landing() {
                     className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-200 transition hover:bg-white/10 sm:w-auto"
                   >
                     <Trash2 className="size-3.5" />
-                    Clear Uploaded Document
+                    Clear Survey Draft
                   </button>
                 ) : null}
               </div>
