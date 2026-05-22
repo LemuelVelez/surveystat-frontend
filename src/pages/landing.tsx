@@ -26,6 +26,16 @@ import {
 import { Link, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import logoUrl from "@/assets/images/logo.svg"
 import {
   ACREDIFY_SYSTEM_URL,
@@ -42,14 +52,17 @@ import {
 const features = [
   {
     title: "Chapter IV Data Gathering",
+    description: "Collect online responses for Chapter IV data gathering and interpretation.",
     icon: ClipboardCheck,
   },
   {
     title: "Document-to-Survey Reader",
+    description: "Generate editable survey items from uploaded DOCX, DOC, or TXT documents.",
     icon: FileText,
   },
   {
     title: "Online and Hardcopy Tallied Statistics",
+    description: "Hardcopy tally counts can be encoded and tallied in Statistics with online responses.",
     icon: BarChart3,
   },
 ]
@@ -77,7 +90,7 @@ const respondentInformationFieldOptions: Array<{
   {
     value: "role",
     label: "Role",
-    description: "Student, faculty, QA personnel, or administrator",
+    description: "Role, position, or custom specified role",
   },
   {
     value: "office",
@@ -868,6 +881,7 @@ export function Landing() {
   const [isLoadingEditSurvey, setIsLoadingEditSurvey] = useState(false)
   const [isUpdatingSurvey, setIsUpdatingSurvey] = useState(false)
   const [deletingSurveyFormId, setDeletingSurveyFormId] = useState<string | null>(null)
+  const [surveyPendingDeletion, setSurveyPendingDeletion] = useState<SurveyForm | null>(null)
   const [duplicatingSurveyFormId, setDuplicatingSurveyFormId] = useState<string | null>(null)
   const [documentSurveyDraft, setDocumentSurveyDraft] = useState<GeneratedSurveyDraft | null>(null)
   const [isReadingSurveyDocument, setIsReadingSurveyDocument] = useState(false)
@@ -1282,12 +1296,14 @@ export function Landing() {
     }
   }
 
-  async function handleDeleteExistingSurvey(form: SurveyForm) {
-    const shouldDelete = window.confirm(
-      `Delete "${form.title}"? This will remove the survey, its items, and submitted responses.`,
-    )
+  function handleDeleteExistingSurvey(form: SurveyForm) {
+    setSurveyPendingDeletion(form)
+  }
 
-    if (!shouldDelete) return
+  async function confirmDeleteExistingSurvey() {
+    const form = surveyPendingDeletion
+
+    if (!form) return
 
     setDeletingSurveyFormId(form.id)
 
@@ -1307,6 +1323,7 @@ export function Landing() {
         closeEditExistingSurvey()
       }
 
+      setSurveyPendingDeletion(null)
       toast.success("Survey deleted successfully.")
       await loadLandingData()
     } catch (error) {
@@ -1792,7 +1809,7 @@ export function Landing() {
           <div className="min-w-0 space-y-6 sm:space-y-8">
             <div className="inline-flex w-full max-w-full items-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-xs font-medium text-cyan-100 wrap-anywhere sm:w-auto sm:max-w-none sm:rounded-full sm:px-4 sm:text-sm">
               <ShieldCheck className="size-4 shrink-0" />
-              Chapter IV survey data gathering and statistics
+              Chapter IV survey data gathering, hardcopy tally, and statistics
             </div>
 
             <div className="space-y-6">
@@ -1882,6 +1899,10 @@ export function Landing() {
                     </div>
                   </div>
 
+                  <p className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm font-semibold leading-6 text-cyan-100 wrap-anywhere">
+                    Hardcopy tally counts can also be encoded and tallied in Statistics together with online survey responses.
+                  </p>
+
                   <div className="mt-6 space-y-3">
                     {activeSurveyCards.map((form, index) => (
                       <button
@@ -1922,8 +1943,9 @@ export function Landing() {
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">
                       <feature.icon className="size-5" />
                     </span>
-                    <div className="flex min-h-10 min-w-0 items-center">
-                      <h3 className="max-w-full truncate font-bold sm:max-w-none">{feature.title}</h3>
+                    <div className="min-w-0">
+                      <h3 className="max-w-full wrap-break-word font-bold">{feature.title}</h3>
+                      <p className="mt-1 line-clamp-2 max-w-full text-sm leading-6 text-slate-400 wrap-anywhere">{feature.description}</p>
                     </div>
                   </div>
                 ))}
@@ -2729,6 +2751,51 @@ export function Landing() {
           </div>
         </DialogShell>
       ) : null}
+
+      <AlertDialog
+        open={Boolean(surveyPendingDeletion)}
+        onOpenChange={(open) => {
+          if (!open && !deletingSurveyFormId) {
+            setSurveyPendingDeletion(null)
+          }
+        }}
+      >
+        <AlertDialogContent className="border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/60">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-black tracking-tight text-white">
+              Delete survey?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm leading-6 text-slate-300">
+              This will permanently remove "{surveyPendingDeletion?.title ?? "this survey"}", including its survey items, online responses, and hardcopy tally counts. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={Boolean(deletingSurveyFormId)}
+              className="border-white/10 bg-white/5 text-white hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={Boolean(deletingSurveyFormId)}
+              onClick={(event) => {
+                event.preventDefault()
+                void confirmDeleteExistingSurvey()
+              }}
+              className="bg-red-500 text-white hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {deletingSurveyFormId ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Deleting
+                </>
+              ) : (
+                "Delete Survey"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   )
 }

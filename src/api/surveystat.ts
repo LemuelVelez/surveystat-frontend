@@ -72,7 +72,7 @@ export type SurveyQuestionnaireForm = SurveyForm & {
   sections: SurveyQuestionnaireSection[]
 }
 
-export type RespondentRole = "Student" | "Faculty" | "QA Personnel" | "Administrator" | string
+export type RespondentRole = string
 
 export type RespondentInformationField = "fullName" | "email" | "role" | "office" | "program"
 
@@ -589,21 +589,10 @@ function getTextRecordValue(record: Record<string, unknown>, keys: string[]) {
   return ""
 }
 
-const validRespondentRoles = new Set<RespondentRole>([
-  "Student",
-  "Faculty",
-  "QA Personnel",
-  "Administrator",
-])
-
 function normalizeRespondentRole(role?: RespondentRole | null): RespondentRole | null {
   const normalizedRole = typeof role === "string" ? role.trim() : ""
 
-  if (!normalizedRole) {
-    return null
-  }
-
-  return validRespondentRoles.has(normalizedRole) ? normalizedRole : null
+  return normalizedRole || null
 }
 
 function normalizeRespondentPayload(respondent?: CreateRespondentPayload | null): CreateRespondentPayload | null {
