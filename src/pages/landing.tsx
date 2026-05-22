@@ -1075,7 +1075,7 @@ function DialogShell({
       role="dialog"
       aria-modal="true"
     >
-      <section className="flex max-h-[calc(100svh-1rem)] w-full max-w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/60 sm:max-h-[95svh] sm:max-w-4xl sm:rounded-3xl">
+      <section className="flex max-h-[95svh] w-full max-w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950 text-white shadow-2xl shadow-slate-950/60 sm:max-w-4xl sm:rounded-3xl">
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3 py-4 backdrop-blur sm:gap-4 sm:px-6 sm:py-5">
           <div className="min-w-0 flex-1">
             <h2 className="max-w-full wrap-break-word text-lg font-black tracking-tight sm:text-2xl">
@@ -1169,6 +1169,9 @@ export function Landing() {
   const [updatingRespondentInfoFormId, setUpdatingRespondentInfoFormId] =
     useState<string | null>(null);
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false);
+  const [isResearchSummaryOpen, setIsResearchSummaryOpen] = useState(false);
+  const [isResearchSummaryDialogOpen, setIsResearchSummaryDialogOpen] =
+    useState(false);
 
   async function loadLandingData() {
     setIsLoading(true);
@@ -2133,6 +2136,119 @@ export function Landing() {
     }
   }
 
+  function openSurveyFromSummary(form: SurveyForm) {
+    setSelectedSurveyCodes([form.code]);
+    setIsResearchSummaryDialogOpen(false);
+    setIsExistingSurveysDialogOpen(true);
+  }
+
+  function renderResearchSurveySummaryContent() {
+    return (
+      <>
+        {isLoading ? (
+          <div className="flex min-h-64 items-center justify-center">
+            <Loader2 className="size-8 animate-spin text-cyan-300" />
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
+                <p className="text-sm text-slate-400">Answers</p>
+                <p className="mt-2 max-w-full truncate text-2xl font-black">
+                  {formatNumber(summary?.answerCount)}
+                </p>
+              </div>
+              <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
+                <p className="text-sm text-slate-400">Items</p>
+                <p className="mt-2 max-w-full truncate text-2xl font-black">
+                  {formatNumber(summary?.itemCount)}
+                </p>
+              </div>
+              <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
+                <p className="text-sm text-slate-400">Interpretation</p>
+                <p className="mt-2 max-w-full truncate text-2xl font-black sm:max-w-none">
+                  {summary?.interpretation ?? "—"}
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm font-semibold leading-6 text-cyan-100 wrap-anywhere">
+              Hardcopy tally counts can also be encoded and tallied in
+              Statistics together with online survey responses.
+            </p>
+
+            <div className="mt-6 space-y-3">
+              {activeSurveyCards.map((form, index) => (
+                <button
+                  key={form.id}
+                  type="button"
+                  onClick={() => openSurveyFromSummary(form)}
+                  className="block w-full rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-300/50 hover:bg-cyan-300/10"
+                >
+                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div className="min-w-0">
+                      <p className="text-xs font-black uppercase tracking-wide text-cyan-200">
+                        Survey {form.surveyStepNumber || index + 1}
+                      </p>
+                      <h3 className="mt-1 line-clamp-2 max-w-full font-bold wrap-anywhere sm:max-w-none">
+                        {form.title}
+                      </h3>
+                      <p className="mt-1 line-clamp-2 max-w-full text-sm leading-6 text-slate-400 wrap-anywhere sm:max-w-none">
+                        {form.description}
+                      </p>
+                      {form.respondentInformationRequired ? (
+                        <p className="mt-2 line-clamp-1 max-w-full text-xs font-semibold text-cyan-100 wrap-anywhere sm:max-w-none">
+                          Details:{" "}
+                          {getRespondentInformationFieldSummary(
+                            form.respondentInformationFields,
+                          )}
+                        </p>
+                      ) : null}
+                      {form.respondentInformationRequired &&
+                      getSurveyRespondentInformationFields(form).includes(
+                        "role",
+                      ) ? (
+                        <p className="mt-1 line-clamp-1 max-w-full text-xs font-semibold text-slate-400 wrap-anywhere sm:max-w-none">
+                          Roles: {getRespondentRoleOptionSummary(form)}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className="w-fit shrink-0 rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-200">
+                      {form.respondentInformationRequired
+                        ? "Info required"
+                        : "Info off"}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div className="mt-6 space-y-3">
+          {features.map((feature) => (
+            <div
+              key={feature.title}
+              className="flex min-w-0 gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4"
+            >
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">
+                <feature.icon className="size-5" />
+              </span>
+              <div className="min-w-0">
+                <h3 className="max-w-full wrap-break-word font-bold">
+                  {feature.title}
+                </h3>
+                <p className="mt-1 line-clamp-2 max-w-full text-sm leading-6 text-slate-400 wrap-anywhere">
+                  {feature.description}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
+
   return (
     <main className="min-h-screen w-full overflow-x-hidden bg-slate-950 text-white">
       <section className="mx-auto flex min-h-screen w-full min-w-0 max-w-7xl flex-col px-2 pb-3 pt-20 sm:px-6 sm:pb-8 sm:pt-28 lg:px-8">
@@ -2338,129 +2454,79 @@ export function Landing() {
             </div>
           </div>
 
-          <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl shadow-cyan-950/50 backdrop-blur sm:rounded-3xl sm:p-4">
-            <div className="min-w-0 rounded-2xl bg-slate-900 p-3 sm:p-5">
-              <div className="mb-5 flex min-w-0 flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                <div className="min-w-0">
-                  <p className="text-sm text-slate-400">
-                    Research Survey Summary
-                  </p>
-                  <h2 className="mt-1 line-clamp-2 max-w-full text-lg font-bold wrap-anywhere sm:max-w-none sm:text-2xl">
-                    {highlightedSurvey?.title ?? "Active Research Surveys"}
-                  </h2>
-                </div>
-                <div className="w-fit shrink-0 rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-300 sm:text-sm">
-                  Live Data
-                </div>
-              </div>
+          <div className="min-w-0">
+            <button
+              type="button"
+              onClick={() => setIsResearchSummaryDialogOpen(true)}
+              className="flex w-full min-w-0 items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left shadow-2xl shadow-cyan-950/50 backdrop-blur transition hover:border-cyan-300/40 hover:bg-cyan-300/10 sm:hidden"
+            >
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-slate-400">
+                  Research Survey Summary
+                </span>
+                <span className="mt-1 line-clamp-2 max-w-full text-lg font-black text-white wrap-anywhere">
+                  {highlightedSurvey?.title ?? "Active Research Surveys"}
+                </span>
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-cyan-400 px-3 py-2 text-xs font-black text-slate-950">
+                View
+                <ArrowUpRight className="size-4" />
+              </span>
+            </button>
 
-              {isLoading ? (
-                <div className="flex min-h-64 items-center justify-center">
-                  <Loader2 className="size-8 animate-spin text-cyan-300" />
-                </div>
-              ) : (
-                <>
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
-                      <p className="text-sm text-slate-400">Answers</p>
-                      <p className="mt-2 max-w-full truncate text-2xl font-black">
-                        {formatNumber(summary?.answerCount)}
-                      </p>
-                    </div>
-                    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
-                      <p className="text-sm text-slate-400">Items</p>
-                      <p className="mt-2 max-w-full truncate text-2xl font-black">
-                        {formatNumber(summary?.itemCount)}
-                      </p>
-                    </div>
-                    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
-                      <p className="text-sm text-slate-400">Interpretation</p>
-                      <p className="mt-2 max-w-full truncate text-2xl font-black sm:max-w-none">
-                        {summary?.interpretation ?? "—"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <p className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm font-semibold leading-6 text-cyan-100 wrap-anywhere">
-                    Hardcopy tally counts can also be encoded and tallied in
-                    Statistics together with online survey responses.
-                  </p>
-
-                  <div className="mt-6 space-y-3">
-                    {activeSurveyCards.map((form, index) => (
-                      <button
-                        key={form.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedSurveyCodes([form.code]);
-                          setIsExistingSurveysDialogOpen(true);
-                        }}
-                        className="block w-full rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-300/50 hover:bg-cyan-300/10"
-                      >
-                        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                          <div className="min-w-0">
-                            <p className="text-xs font-black uppercase tracking-wide text-cyan-200">
-                              Survey {form.surveyStepNumber || index + 1}
-                            </p>
-                            <h3 className="mt-1 line-clamp-2 max-w-full font-bold wrap-anywhere sm:max-w-none">
-                              {form.title}
-                            </h3>
-                            <p className="mt-1 line-clamp-2 max-w-full text-sm leading-6 text-slate-400 wrap-anywhere sm:max-w-none">
-                              {form.description}
-                            </p>
-                            {form.respondentInformationRequired ? (
-                              <p className="mt-2 line-clamp-1 max-w-full text-xs font-semibold text-cyan-100 wrap-anywhere sm:max-w-none">
-                                Details:{" "}
-                                {getRespondentInformationFieldSummary(
-                                  form.respondentInformationFields,
-                                )}
-                              </p>
-                            ) : null}
-                            {form.respondentInformationRequired &&
-                            getSurveyRespondentInformationFields(form).includes(
-                              "role",
-                            ) ? (
-                              <p className="mt-1 line-clamp-1 max-w-full text-xs font-semibold text-slate-400 wrap-anywhere sm:max-w-none">
-                                Roles: {getRespondentRoleOptionSummary(form)}
-                              </p>
-                            ) : null}
-                          </div>
-                          <span className="w-fit shrink-0 rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-200">
-                            {form.respondentInformationRequired
-                              ? "Info required"
-                              : "Info off"}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              <div className="mt-6 space-y-3">
-                {features.map((feature) => (
-                  <div
-                    key={feature.title}
-                    className="flex min-w-0 gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4"
-                  >
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">
-                      <feature.icon className="size-5" />
+            <div className="hidden min-w-0 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl shadow-cyan-950/50 backdrop-blur sm:block sm:rounded-3xl">
+              <div className="min-w-0 rounded-2xl bg-slate-900 p-5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setIsResearchSummaryOpen((current) => !current)
+                  }
+                  className="flex w-full min-w-0 items-start justify-between gap-4 text-left"
+                  aria-controls="research-survey-summary-panel"
+                  aria-expanded={isResearchSummaryOpen}
+                >
+                  <span className="min-w-0">
+                    <span className="text-sm text-slate-400">
+                      Research Survey Summary
                     </span>
-                    <div className="min-w-0">
-                      <h3 className="max-w-full wrap-break-word font-bold">
-                        {feature.title}
-                      </h3>
-                      <p className="mt-1 line-clamp-2 max-w-full text-sm leading-6 text-slate-400 wrap-anywhere">
-                        {feature.description}
-                      </p>
-                    </div>
+                    <span className="mt-1 line-clamp-2 block max-w-full text-2xl font-bold wrap-anywhere">
+                      {highlightedSurvey?.title ?? "Active Research Surveys"}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-3">
+                    <span className="w-fit rounded-full bg-emerald-400/10 px-3 py-1 text-sm font-semibold text-emerald-300">
+                      Live Data
+                    </span>
+                    <span className="inline-flex size-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-cyan-100 transition hover:bg-white/10">
+                      {isResearchSummaryOpen ? (
+                        <ArrowUp className="size-4" />
+                      ) : (
+                        <ArrowDown className="size-4" />
+                      )}
+                    </span>
+                  </span>
+                </button>
+
+                {isResearchSummaryOpen ? (
+                  <div id="research-survey-summary-panel" className="mt-6">
+                    {renderResearchSurveySummaryContent()}
                   </div>
-                ))}
+                ) : null}
               </div>
             </div>
           </div>
         </div>
       </section>
+
+      {isResearchSummaryDialogOpen ? (
+        <DialogShell
+          title="Research Survey Summary"
+          description={highlightedSurvey?.title ?? "Active Research Surveys"}
+          onClose={() => setIsResearchSummaryDialogOpen(false)}
+        >
+          {renderResearchSurveySummaryContent()}
+        </DialogShell>
+      ) : null}
 
       {isExistingSurveysDialogOpen ? (
         <DialogShell
