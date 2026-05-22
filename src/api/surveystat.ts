@@ -1,408 +1,432 @@
 type RequestOptions = Omit<RequestInit, "body"> & {
-  body?: BodyInit | Record<string, unknown> | unknown[] | null
-}
+  body?: BodyInit | Record<string, unknown> | unknown[] | null;
+};
 
 type ApiResponseEnvelope<T> = {
-  data?: T
-  message?: string
-  error?: string
-}
+  data?: T;
+  message?: string;
+  error?: string;
+};
 
-export type LikertValue = 1 | 2 | 3 | 4 | 5
+export type LikertValue = 1 | 2 | 3 | 4 | 5;
 
 export type LikertScaleOption = {
-  value: LikertValue
-  label: string
-  description?: string | null
-}
+  value: LikertValue;
+  label: string;
+  description?: string | null;
+};
 
-export type SurveyFormCode = string
-export type ResponseSourceFilter = "all" | "online" | "hardcopy"
+export type SurveyFormCode = string;
+export type RespondentRoleOption = string;
+export type ResponseSourceFilter = "all" | "online" | "hardcopy";
 
 export type SurveyForm = {
-  id: string
-  code: SurveyFormCode
-  surveySeriesId?: string | null
-  surveyStepNumber?: number
-  surveySeriesTitle?: string | null
-  title: string
-  description: string
-  studyTitle?: string | null
-  documentHeader?: Record<string, unknown> | null
-  introduction?: string | null
-  researchers?: string[] | null
-  adviser?: string | null
-  instruction: string
-  scale: LikertScaleOption[]
-  voluntaryNote?: string | null
-  signatureLabel?: string | null
-  respondentInformationRequired: boolean
-  respondentInformationFields?: RespondentInformationField[]
-  isActive: boolean
-  createdAt?: string | Date
-  updatedAt?: string | Date
-}
+  id: string;
+  code: SurveyFormCode;
+  surveySeriesId?: string | null;
+  surveyStepNumber?: number;
+  surveySeriesTitle?: string | null;
+  title: string;
+  description: string;
+  studyTitle?: string | null;
+  documentHeader?: Record<string, unknown> | null;
+  introduction?: string | null;
+  researchers?: string[] | null;
+  adviser?: string | null;
+  instruction: string;
+  scale: LikertScaleOption[];
+  voluntaryNote?: string | null;
+  signatureLabel?: string | null;
+  respondentInformationRequired: boolean;
+  respondentInformationFields?: RespondentInformationField[];
+  respondentRoleOptions?: RespondentRoleOption[];
+  isActive: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+};
 
 export type SurveySection = {
-  id: string
-  formId: string
-  code: string
-  title: string
-  sortOrder: number
-  createdAt?: string | Date
-  updatedAt?: string | Date
-}
+  id: string;
+  formId: string;
+  code: string;
+  title: string;
+  sortOrder: number;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+};
 
 export type SurveyItem = {
-  id: string
-  sectionId: string
-  code: string
-  statement: string
-  sortOrder: number
-  isRequired: boolean
-  createdAt?: string | Date
-  updatedAt?: string | Date
-}
+  id: string;
+  sectionId: string;
+  code: string;
+  statement: string;
+  sortOrder: number;
+  isRequired: boolean;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+};
 
 export type SurveyQuestionnaireSection = SurveySection & {
-  items: SurveyItem[]
-}
+  items: SurveyItem[];
+};
 
 export type SurveyQuestionnaireForm = SurveyForm & {
-  sections: SurveyQuestionnaireSection[]
-}
+  sections: SurveyQuestionnaireSection[];
+};
 
-export type RespondentRole = string
+export type RespondentRole = string;
 
-export type RespondentInformationField = "fullName" | "email" | "role" | "office" | "program"
+export type RespondentInformationField =
+  | "fullName"
+  | "email"
+  | "role"
+  | "office"
+  | "program";
 
 export type CreateRespondentPayload = {
-  fullName?: string | null
-  email?: string | null
-  role?: RespondentRole | null
-  office?: string | null
-  program?: string | null
-  consentGiven?: boolean
-}
+  fullName?: string | null;
+  email?: string | null;
+  role?: RespondentRole | null;
+  office?: string | null;
+  program?: string | null;
+  consentGiven?: boolean;
+};
 
 export type SubmitSurveyAnswerPayload = {
-  itemId: string
-  rating: LikertValue
-}
+  itemId: string;
+  rating: LikertValue;
+};
 
 export type SubmitSurveyResponsePayload = {
-  formId?: string
-  formCode?: SurveyFormCode
-  respondentId?: string | null
-  respondent?: CreateRespondentPayload | null
-  respondentSignature?: string | null
-  respondentSignatureImage?: string | null
-  respondentSignatureFileName?: string | null
-  voluntaryConsent: boolean
-  answers: SubmitSurveyAnswerPayload[]
-}
+  formId?: string;
+  formCode?: SurveyFormCode;
+  respondentId?: string | null;
+  respondent?: CreateRespondentPayload | null;
+  respondentSignature?: string | null;
+  respondentSignatureImage?: string | null;
+  respondentSignatureFileName?: string | null;
+  voluntaryConsent: boolean;
+  answers: SubmitSurveyAnswerPayload[];
+};
 
 export type SurveyResponse = {
-  id: string
-  formId: string
-  respondentId?: string | null
-  respondentSignature?: string | null
-  respondentSignatureImage?: string | null
-  respondentSignatureFileName?: string | null
-  voluntaryConsent: boolean
-  submittedAt?: string | Date | null
-  createdAt?: string | Date
-  updatedAt?: string | Date
-}
+  id: string;
+  formId: string;
+  respondentId?: string | null;
+  respondentSignature?: string | null;
+  respondentSignatureImage?: string | null;
+  respondentSignatureFileName?: string | null;
+  voluntaryConsent: boolean;
+  submittedAt?: string | Date | null;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+};
 
 export type SurveyAnswer = {
-  id: string
-  responseId: string
-  itemId: string
-  rating: LikertValue
-  createdAt?: string | Date
-  updatedAt?: string | Date
-}
+  id: string;
+  responseId: string;
+  itemId: string;
+  rating: LikertValue;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+};
 
 export type SurveyResponseSummary = SurveyResponse & {
-  formCode: SurveyFormCode
-  formTitle: string
-  respondentFullName?: string | null
-  respondentEmail?: string | null
-  respondentRole?: RespondentRole | null
-  respondentOffice?: string | null
-  respondentProgram?: string | null
-  answerCount: number
-  weightedMean: number
-  interpretation: string
-  meanRange: string
-}
+  formCode: SurveyFormCode;
+  formTitle: string;
+  respondentFullName?: string | null;
+  respondentEmail?: string | null;
+  respondentRole?: RespondentRole | null;
+  respondentOffice?: string | null;
+  respondentProgram?: string | null;
+  answerCount: number;
+  weightedMean: number;
+  interpretation: string;
+  meanRange: string;
+};
 
 export type SurveyResponseAnswer = SurveyAnswer & {
-  formId: string
-  formCode: SurveyFormCode
-  formTitle: string
-  sectionId: string
-  sectionCode: string
-  sectionTitle: string
-  itemCode: string
-  itemStatement: string
-  itemSortOrder: number
-  interpretation: string
-  meanRange: string
-}
+  formId: string;
+  formCode: SurveyFormCode;
+  formTitle: string;
+  sectionId: string;
+  sectionCode: string;
+  sectionTitle: string;
+  itemCode: string;
+  itemStatement: string;
+  itemSortOrder: number;
+  interpretation: string;
+  meanRange: string;
+};
 
-export type RatingDistribution = Record<LikertValue, number>
+export type RatingDistribution = Record<LikertValue, number>;
 
 export type DescriptiveCalculationStep = {
-  label: string
-  formula: string
-  substitution: string
-  result: string
-}
+  label: string;
+  formula: string;
+  substitution: string;
+  result: string;
+};
 
 export type DescriptiveCalculation = {
-  basis: string
-  scale: string
-  weightedTotal: number
-  squaredDeviationsTotal: number
-  steps: DescriptiveCalculationStep[]
-}
+  basis: string;
+  scale: string;
+  weightedTotal: number;
+  squaredDeviationsTotal: number;
+  steps: DescriptiveCalculationStep[];
+};
 
 export type StatisticsSourceBreakdown = {
-  onlineResponseCount: number
-  hardcopyResponseCount: number
-  onlineAnswerCount: number
-  hardcopyAnswerCount: number
-}
+  onlineResponseCount: number;
+  hardcopyResponseCount: number;
+  onlineAnswerCount: number;
+  hardcopyAnswerCount: number;
+};
 
 export type DescriptiveStatistics = {
-  count: number
-  mean: number
-  weightedMean: number
-  standardDeviation: number
-  variance: number
-  minimum: number
-  maximum: number
-  total: number
-  distribution: RatingDistribution
-  interpretation: string
-  meanRange: string
-  sourceBreakdown?: StatisticsSourceBreakdown
-  calculation?: DescriptiveCalculation
-}
+  count: number;
+  mean: number;
+  weightedMean: number;
+  standardDeviation: number;
+  variance: number;
+  minimum: number;
+  maximum: number;
+  total: number;
+  distribution: RatingDistribution;
+  interpretation: string;
+  meanRange: string;
+  sourceBreakdown?: StatisticsSourceBreakdown;
+  calculation?: DescriptiveCalculation;
+};
 
 export type StatisticsSummary = DescriptiveStatistics & {
-  responseCount: number
-  itemCount: number
-  answerCount: number
-}
+  responseCount: number;
+  itemCount: number;
+  answerCount: number;
+};
 
 export type SurveyItemStatistics = DescriptiveStatistics & {
-  formId: string
-  formCode: SurveyFormCode
-  formTitle: string
-  sectionId: string
-  sectionCode: string
-  sectionTitle: string
-  itemId: string
-  itemCode: string
-  itemStatement: string
-  itemSortOrder: number
-}
+  formId: string;
+  formCode: SurveyFormCode;
+  formTitle: string;
+  sectionId: string;
+  sectionCode: string;
+  sectionTitle: string;
+  itemId: string;
+  itemCode: string;
+  itemStatement: string;
+  itemSortOrder: number;
+};
 
 export type SurveySectionStatistics = DescriptiveStatistics & {
-  formId: string
-  formCode: SurveyFormCode
-  formTitle: string
-  sectionId: string
-  sectionCode: string
-  sectionTitle: string
-  sectionSortOrder: number
-  items: SurveyItemStatistics[]
-}
+  formId: string;
+  formCode: SurveyFormCode;
+  formTitle: string;
+  sectionId: string;
+  sectionCode: string;
+  sectionTitle: string;
+  sectionSortOrder: number;
+  items: SurveyItemStatistics[];
+};
 
 export type SurveyFormStatistics = DescriptiveStatistics & {
-  formId: string
-  formCode: SurveyFormCode
-  formTitle: string
-  sections: SurveySectionStatistics[]
-}
+  formId: string;
+  formCode: SurveyFormCode;
+  formTitle: string;
+  sections: SurveySectionStatistics[];
+};
 
 export type CreateSurveyItemPayload = {
-  code?: string
-  statement: string
-  sortOrder?: number
-  isRequired?: boolean
-}
+  code?: string;
+  statement: string;
+  sortOrder?: number;
+  isRequired?: boolean;
+};
 
 export type CreateSurveySectionPayload = {
-  code?: string
-  title: string
-  sortOrder?: number
-  items: CreateSurveyItemPayload[]
-}
+  code?: string;
+  title: string;
+  sortOrder?: number;
+  items: CreateSurveyItemPayload[];
+};
 
 export type CreateSurveyFormPayload = {
-  code: SurveyFormCode
-  surveySeriesId?: string | null
-  surveyStepNumber?: number
-  surveySeriesTitle?: string | null
-  title: string
-  description?: string
-  studyTitle?: string | null
-  documentHeader?: Record<string, unknown> | null
-  introduction?: string | null
-  researchers?: string[] | null
-  adviser?: string | null
-  instruction?: string
-  scale?: LikertScaleOption[]
-  voluntaryNote?: string | null
-  signatureLabel?: string | null
-  respondentInformationRequired?: boolean
-  respondentInformationFields?: RespondentInformationField[]
-  isActive?: boolean
-  sections?: CreateSurveySectionPayload[]
-}
+  code: SurveyFormCode;
+  surveySeriesId?: string | null;
+  surveyStepNumber?: number;
+  surveySeriesTitle?: string | null;
+  title: string;
+  description?: string;
+  studyTitle?: string | null;
+  documentHeader?: Record<string, unknown> | null;
+  introduction?: string | null;
+  researchers?: string[] | null;
+  adviser?: string | null;
+  instruction?: string;
+  scale?: LikertScaleOption[];
+  voluntaryNote?: string | null;
+  signatureLabel?: string | null;
+  respondentInformationRequired?: boolean;
+  respondentInformationFields?: RespondentInformationField[];
+  respondentRoleOptions?: RespondentRoleOption[];
+  isActive?: boolean;
+  sections?: CreateSurveySectionPayload[];
+};
 
 export type CreateSurveySeriesPayload = {
-  surveySeriesId?: string | null
-  surveySeriesTitle: string
-  forms: CreateSurveyFormPayload[]
-}
+  surveySeriesId?: string | null;
+  surveySeriesTitle: string;
+  forms: CreateSurveyFormPayload[];
+};
 
 export type UpdateSurveyFormPayload = {
-  title?: string
-  description?: string | null
-  respondentInformationRequired?: boolean
-  respondentInformationFields?: RespondentInformationField[]
-  isActive?: boolean
-}
+  title?: string;
+  description?: string | null;
+  respondentInformationRequired?: boolean;
+  respondentInformationFields?: RespondentInformationField[];
+  respondentRoleOptions?: RespondentRoleOption[];
+  isActive?: boolean;
+};
 
 export type UpdateSurveyFormRespondentInformationPayload = {
-  respondentInformationRequired: boolean
-  respondentInformationFields?: RespondentInformationField[]
-}
+  respondentInformationRequired: boolean;
+  respondentInformationFields?: RespondentInformationField[];
+  respondentRoleOptions?: RespondentRoleOption[];
+};
 
 export type UpdateSurveyItemPayload = CreateSurveyItemPayload & {
-  id?: string | null
-}
+  id?: string | null;
+};
 
-export type UpdateSurveySectionPayload = Omit<CreateSurveySectionPayload, "items"> & {
-  id?: string | null
-  items: UpdateSurveyItemPayload[]
-}
+export type UpdateSurveySectionPayload = Omit<
+  CreateSurveySectionPayload,
+  "items"
+> & {
+  id?: string | null;
+  items: UpdateSurveyItemPayload[];
+};
 
 export type UpdateSurveyQuestionnairePayload = UpdateSurveyFormPayload & {
-  sections?: UpdateSurveySectionPayload[]
-}
+  sections?: UpdateSurveySectionPayload[];
+};
 
 export type StatisticsFilters = {
-  formId?: string
-  formCode?: SurveyFormCode
-  sectionId?: string
-  sectionCode?: string
-  itemId?: string
-  submittedFrom?: string
-  submittedTo?: string
-  responseSource?: ResponseSourceFilter
-}
+  formId?: string;
+  formCode?: SurveyFormCode;
+  sectionId?: string;
+  sectionCode?: string;
+  itemId?: string;
+  submittedFrom?: string;
+  submittedTo?: string;
+  responseSource?: ResponseSourceFilter;
+};
 
 export type ManualHardcopySurveyItemCounts = {
-  itemId: string
-  counts: Partial<Record<LikertValue, number>>
-}
+  itemId: string;
+  counts: Partial<Record<LikertValue, number>>;
+};
 
 export type CreateManualHardcopySurveyStatisticsPayload = {
-  formId?: string
-  formCode?: SurveyFormCode
-  batchLabel?: string | null
-  hardcopyResponseCount?: number | null
-  encodedBy?: string | null
-  notes?: string | null
-  ratingCounts: ManualHardcopySurveyItemCounts[]
-}
+  formId?: string;
+  formCode?: SurveyFormCode;
+  batchLabel?: string | null;
+  hardcopyResponseCount?: number | null;
+  encodedBy?: string | null;
+  notes?: string | null;
+  ratingCounts: ManualHardcopySurveyItemCounts[];
+};
 
 export type ManualHardcopySurveyStatisticsResult = {
   batch: {
-    id: string
-    formId: string
-    batchLabel: string
-    hardcopyResponseCount: number
-    encodedBy?: string | null
-    notes?: string | null
-    encodedAt?: string | Date
-  }
-  itemCount: number
-  answerCount: number
+    id: string;
+    formId: string;
+    batchLabel: string;
+    hardcopyResponseCount: number;
+    encodedBy?: string | null;
+    notes?: string | null;
+    encodedAt?: string | Date;
+  };
+  itemCount: number;
+  answerCount: number;
   ratingCounts: Array<{
-    itemId: string
-    rating: LikertValue
-    responseCount: number
-  }>
-}
+    itemId: string;
+    rating: LikertValue;
+    responseCount: number;
+  }>;
+};
 
 export type SurveyResponseFilters = {
-  formId?: string
-  formCode?: SurveyFormCode
-  respondentId?: string
-  submittedOnly?: boolean
-  limit?: number
-  offset?: number
-}
+  formId?: string;
+  formCode?: SurveyFormCode;
+  respondentId?: string;
+  submittedOnly?: boolean;
+  limit?: number;
+  offset?: number;
+};
 
 export class SurveyStatApiError extends Error {
-  status: number
-  payload: unknown
+  status: number;
+  payload: unknown;
 
   constructor(message: string, status: number, payload: unknown = null) {
-    super(message)
-    this.name = "SurveyStatApiError"
-    this.status = status
-    this.payload = payload
+    super(message);
+    this.name = "SurveyStatApiError";
+    this.status = status;
+    this.payload = payload;
   }
 }
 
-type EnvValue = string | boolean | undefined
+type EnvValue = string | boolean | undefined;
 
-const ENV = (import.meta as unknown as {
-  env?: Record<string, EnvValue>
-}).env
-
-const PROCESS_ENV = (globalThis as unknown as {
-  process?: {
-    env?: Record<string, string | undefined>
+const ENV = (
+  import.meta as unknown as {
+    env?: Record<string, EnvValue>;
   }
-}).process?.env
+).env;
 
-const DEFAULT_LOCAL_SURVEYSTAT_API_URL = "http://localhost:8080"
+const PROCESS_ENV = (
+  globalThis as unknown as {
+    process?: {
+      env?: Record<string, string | undefined>;
+    };
+  }
+).process?.env;
+
+const DEFAULT_LOCAL_SURVEYSTAT_API_URL = "http://localhost:8080";
 
 function getEnvValue(keys: string[]) {
-  const envSources: Array<Record<string, EnvValue> | undefined> = [ENV, PROCESS_ENV]
+  const envSources: Array<Record<string, EnvValue> | undefined> = [
+    ENV,
+    PROCESS_ENV,
+  ];
 
   for (const key of keys) {
     for (const envSource of envSources) {
-      const value = envSource?.[key]
+      const value = envSource?.[key];
 
       if (typeof value === "string" && value.trim()) {
-        return value.trim()
+        return value.trim();
       }
     }
   }
 
-  return undefined
+  return undefined;
 }
 
 function isLocalBrowserHost() {
   if (typeof window === "undefined") {
-    return false
+    return false;
   }
 
-  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname)
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 }
 
 function isDevelopmentEnvironment() {
-  return ENV?.DEV === true || ENV?.MODE === "development" || PROCESS_ENV?.NODE_ENV === "development"
+  return (
+    ENV?.DEV === true ||
+    ENV?.MODE === "development" ||
+    PROCESS_ENV?.NODE_ENV === "development"
+  );
 }
 
 const ENV_API_URL = getEnvValue([
@@ -410,118 +434,131 @@ const ENV_API_URL = getEnvValue([
   "VITE_SURVEYSTAT_API_URL",
   "SurveyStat_URL",
   "SURVEYSTAT_URL",
-])
-const ENV_SYSTEM_URL = getEnvValue(["VITE_ACREDIFY_SYSTEM_URL", "VITE_SYSTEM_URL"])
+]);
+const ENV_SYSTEM_URL = getEnvValue([
+  "VITE_ACREDIFY_SYSTEM_URL",
+  "VITE_SYSTEM_URL",
+]);
 
 export const SURVEYSTAT_API_URL = resolveRequiredUrl(
   ENV_API_URL,
   "VITE_SURVEYSTAT_URL or SurveyStat_URL",
   DEFAULT_LOCAL_SURVEYSTAT_API_URL,
-)
-export const ACREDIFY_SYSTEM_URL = normalizeOptionalUrl(ENV_SYSTEM_URL)
+);
+export const ACREDIFY_SYSTEM_URL = normalizeOptionalUrl(ENV_SYSTEM_URL);
 
 function normalizeBaseUrl(url: string) {
-  return url.trim().replace(/\/+$/, "")
+  return url.trim().replace(/\/+$/, "");
 }
 
 function normalizeOptionalUrl(url?: string) {
-  const trimmed = url?.trim()
+  const trimmed = url?.trim();
 
   if (!trimmed) {
-    return ""
+    return "";
   }
 
-  return normalizeBaseUrl(trimmed)
+  return normalizeBaseUrl(trimmed);
 }
 
-function resolveRequiredUrl(url: string | undefined, envName: string, localFallbackUrl?: string) {
-  const normalizedUrl = normalizeOptionalUrl(url)
+function resolveRequiredUrl(
+  url: string | undefined,
+  envName: string,
+  localFallbackUrl?: string,
+) {
+  const normalizedUrl = normalizeOptionalUrl(url);
 
   if (normalizedUrl) {
-    return normalizedUrl
+    return normalizedUrl;
   }
 
-  const normalizedLocalFallbackUrl = normalizeOptionalUrl(localFallbackUrl)
+  const normalizedLocalFallbackUrl = normalizeOptionalUrl(localFallbackUrl);
 
-  if (normalizedLocalFallbackUrl && (isDevelopmentEnvironment() || isLocalBrowserHost())) {
-    return normalizedLocalFallbackUrl
+  if (
+    normalizedLocalFallbackUrl &&
+    (isDevelopmentEnvironment() || isLocalBrowserHost())
+  ) {
+    return normalizedLocalFallbackUrl;
   }
 
-  throw new SurveyStatApiError(
-    `${envName} is not configured.`,
-    500,
-    { envName },
-  )
+  throw new SurveyStatApiError(`${envName} is not configured.`, 500, {
+    envName,
+  });
 }
 
 function normalizePath(path: string) {
-  if (!path) return ""
+  if (!path) return "";
 
-  return path.startsWith("/") ? path : `/${path}`
+  return path.startsWith("/") ? path : `/${path}`;
 }
 
 function buildUrl(path: string) {
-  return `${SURVEYSTAT_API_URL}${normalizePath(path)}`
+  return `${SURVEYSTAT_API_URL}${normalizePath(path)}`;
 }
 
 function isJsonResponse(response: Response) {
-  return response.headers.get("content-type")?.includes("application/json")
+  return response.headers.get("content-type")?.includes("application/json");
 }
 
 async function parseResponseBody(response: Response) {
-  if (response.status === 204) return null
+  if (response.status === 204) return null;
 
   if (isJsonResponse(response)) {
-    return response.json()
+    return response.json();
   }
 
-  const text = await response.text()
-  return text || null
+  const text = await response.text();
+  return text || null;
 }
 
 function getErrorMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>
+    const record = payload as Record<string, unknown>;
 
     if (typeof record.error === "string" && record.error.trim()) {
-      return record.error
+      return record.error;
     }
 
     if (typeof record.message === "string" && record.message.trim()) {
-      return record.message
+      return record.message;
     }
   }
 
   if (typeof payload === "string" && payload.trim()) {
-    return payload
+    return payload;
   }
 
-  return fallback
+  return fallback;
 }
 
 function unwrapEnvelope<T>(payload: unknown): T {
   if (payload && typeof payload === "object" && "data" in payload) {
-    return (payload as ApiResponseEnvelope<T>).data as T
+    return (payload as ApiResponseEnvelope<T>).data as T;
   }
 
-  return payload as T
+  return payload as T;
 }
 
-function buildQueryString(params: Record<string, string | number | boolean | undefined | null>) {
-  const query = new URLSearchParams()
+function buildQueryString(
+  params: Record<string, string | number | boolean | undefined | null>,
+) {
+  const query = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== "") {
-      query.set(key, String(value))
+      query.set(key, String(value));
     }
-  })
+  });
 
-  const queryString = query.toString()
-  return queryString ? `?${queryString}` : ""
+  const queryString = query.toString();
+  return queryString ? `?${queryString}` : "";
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { headers, body, ...requestOptions } = options
+async function request<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const { headers, body, ...requestOptions } = options;
 
   const hasJsonBody =
     body !== null &&
@@ -530,7 +567,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     !(body instanceof FormData) &&
     !(body instanceof Blob) &&
     !(body instanceof ArrayBuffer) &&
-    !(body instanceof URLSearchParams)
+    !(body instanceof URLSearchParams);
 
   const response = await fetch(buildUrl(path), {
     credentials: "include",
@@ -540,74 +577,89 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       ...(hasJsonBody ? { "Content-Type": "application/json" } : {}),
       ...headers,
     },
-    body: hasJsonBody ? JSON.stringify(body) : (body as BodyInit | null | undefined),
-  })
+    body: hasJsonBody
+      ? JSON.stringify(body)
+      : (body as BodyInit | null | undefined),
+  });
 
-  const payload = await parseResponseBody(response)
+  const payload = await parseResponseBody(response);
 
   if (!response.ok) {
     throw new SurveyStatApiError(
       getErrorMessage(payload, "SurveyStat request failed."),
       response.status,
       payload,
-    )
+    );
   }
 
-  return unwrapEnvelope<T>(payload)
+  return unwrapEnvelope<T>(payload);
 }
 
 export const surveystatApi = {
   get: <T>(path: string, options?: RequestOptions) =>
     request<T>(path, { ...options, method: "GET" }),
 
-  post: <T>(path: string, body?: RequestOptions["body"], options?: RequestOptions) =>
-    request<T>(path, { ...options, method: "POST", body }),
+  post: <T>(
+    path: string,
+    body?: RequestOptions["body"],
+    options?: RequestOptions,
+  ) => request<T>(path, { ...options, method: "POST", body }),
 
-  put: <T>(path: string, body?: RequestOptions["body"], options?: RequestOptions) =>
-    request<T>(path, { ...options, method: "PUT", body }),
+  put: <T>(
+    path: string,
+    body?: RequestOptions["body"],
+    options?: RequestOptions,
+  ) => request<T>(path, { ...options, method: "PUT", body }),
 
-  patch: <T>(path: string, body?: RequestOptions["body"], options?: RequestOptions) =>
-    request<T>(path, { ...options, method: "PATCH", body }),
+  patch: <T>(
+    path: string,
+    body?: RequestOptions["body"],
+    options?: RequestOptions,
+  ) => request<T>(path, { ...options, method: "PATCH", body }),
 
   del: <T>(path: string, options?: RequestOptions) =>
     request<T>(path, { ...options, method: "DELETE" }),
-}
+};
 
 function hasTextValue(value?: string | null) {
-  return typeof value === "string" && value.trim().length > 0
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 function getTextRecordValue(record: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
-    const value = record[key]
+    const value = record[key];
 
     if (typeof value === "string" && value.trim()) {
-      return value.trim()
+      return value.trim();
     }
   }
 
-  return ""
+  return "";
 }
 
-function normalizeRespondentRole(role?: RespondentRole | null): RespondentRole | null {
-  const normalizedRole = typeof role === "string" ? role.trim() : ""
+function normalizeRespondentRole(
+  role?: RespondentRole | null,
+): RespondentRole | null {
+  const normalizedRole = typeof role === "string" ? role.trim() : "";
 
-  return normalizedRole || null
+  return normalizedRole || null;
 }
 
-function normalizeRespondentPayload(respondent?: CreateRespondentPayload | null): CreateRespondentPayload | null {
+function normalizeRespondentPayload(
+  respondent?: CreateRespondentPayload | null,
+): CreateRespondentPayload | null {
   if (!respondent) {
-    return null
+    return null;
   }
 
   return {
     ...respondent,
     role: normalizeRespondentRole(respondent.role),
-  }
+  };
 }
 
 function hasRespondentDetails(respondent?: CreateRespondentPayload | null) {
-  if (!respondent) return false
+  if (!respondent) return false;
 
   return (
     hasTextValue(respondent.fullName) ||
@@ -615,21 +667,23 @@ function hasRespondentDetails(respondent?: CreateRespondentPayload | null) {
     hasTextValue(respondent.role) ||
     hasTextValue(respondent.office) ||
     hasTextValue(respondent.program)
-  )
+  );
 }
 
-function withAnonymousRespondent(payload: SubmitSurveyResponsePayload): SubmitSurveyResponsePayload {
+function withAnonymousRespondent(
+  payload: SubmitSurveyResponsePayload,
+): SubmitSurveyResponsePayload {
   if (payload.respondentId) {
-    return payload
+    return payload;
   }
 
-  const respondent = normalizeRespondentPayload(payload.respondent)
+  const respondent = normalizeRespondentPayload(payload.respondent);
 
   if (hasRespondentDetails(respondent)) {
     return {
       ...payload,
       respondent,
-    }
+    };
   }
 
   return {
@@ -638,18 +692,21 @@ function withAnonymousRespondent(payload: SubmitSurveyResponsePayload): SubmitSu
       fullName: "Anonymous Respondent",
       consentGiven: payload.voluntaryConsent,
     },
-  }
+  };
 }
 
-function normalizeSurveyResponseSummary(response: SurveyResponseSummary, index: number): SurveyResponseSummary {
-  const record = response as SurveyResponseSummary & Record<string, unknown>
-  const anonymousLabel = `Anonymous Respondent ${index + 1}`
+function normalizeSurveyResponseSummary(
+  response: SurveyResponseSummary,
+  index: number,
+): SurveyResponseSummary {
+  const record = response as SurveyResponseSummary & Record<string, unknown>;
+  const anonymousLabel = `Anonymous Respondent ${index + 1}`;
   const respondentFullName = hasTextValue(response.respondentFullName)
     ? response.respondentFullName!.trim()
-    : anonymousLabel
+    : anonymousLabel;
   const respondentId = hasTextValue(response.respondentId)
     ? response.respondentId!.trim()
-    : `anonymous-${response.id || index + 1}`
+    : `anonymous-${response.id || index + 1}`;
   const respondentSignature = getTextRecordValue(record, [
     "respondentSignature",
     "respondent_signature",
@@ -658,7 +715,7 @@ function normalizeSurveyResponseSummary(response: SurveyResponseSummary, index: 
     "signature",
     "signatureUrl",
     "signature_url",
-  ])
+  ]);
   const respondentSignatureImage = getTextRecordValue(record, [
     "respondentSignatureImage",
     "respondent_signature_image",
@@ -670,7 +727,7 @@ function normalizeSurveyResponseSummary(response: SurveyResponseSummary, index: 
     "signature_data_url",
     "signatureBase64",
     "signature_base64",
-  ])
+  ]);
   const respondentSignatureFileName = getTextRecordValue(record, [
     "respondentSignatureFileName",
     "respondent_signature_file_name",
@@ -678,26 +735,37 @@ function normalizeSurveyResponseSummary(response: SurveyResponseSummary, index: 
     "signature_file_name",
     "fileName",
     "file_name",
-  ])
+  ]);
 
   return {
     ...response,
     respondentId,
     respondentFullName,
-    respondentRole: hasTextValue(response.respondentRole) ? String(response.respondentRole).trim() : "Anonymous",
-    respondentSignature: respondentSignature || response.respondentSignature || null,
-    respondentSignatureImage: respondentSignatureImage || response.respondentSignatureImage || null,
-    respondentSignatureFileName: respondentSignatureFileName || response.respondentSignatureFileName || null,
-  }
+    respondentRole: hasTextValue(response.respondentRole)
+      ? String(response.respondentRole).trim()
+      : "Anonymous",
+    respondentSignature:
+      respondentSignature || response.respondentSignature || null,
+    respondentSignatureImage:
+      respondentSignatureImage || response.respondentSignatureImage || null,
+    respondentSignatureFileName:
+      respondentSignatureFileName ||
+      response.respondentSignatureFileName ||
+      null,
+  };
 }
 
-function normalizeSurveyResponseSummaryList(responses: SurveyResponseSummary[]) {
-  return responses.map(normalizeSurveyResponseSummary)
+function normalizeSurveyResponseSummaryList(
+  responses: SurveyResponseSummary[],
+) {
+  return responses.map(normalizeSurveyResponseSummary);
 }
 
 export const surveyStatService = {
   listSurveyForms: (activeOnly = true) =>
-    surveystatApi.get<SurveyForm[]>(`/surveys/forms${buildQueryString({ activeOnly })}`),
+    surveystatApi.get<SurveyForm[]>(
+      `/surveys/forms${buildQueryString({ activeOnly })}`,
+    ),
 
   createSurveyForm: (payload: CreateSurveyFormPayload) =>
     surveystatApi.post<SurveyQuestionnaireForm>("/surveys/forms", payload),
@@ -706,16 +774,33 @@ export const surveyStatService = {
     surveystatApi.post<SurveyQuestionnaireForm[]>("/surveys/series", payload),
 
   updateSurveyForm: (formId: string, payload: UpdateSurveyFormPayload) =>
-    surveystatApi.patch<SurveyForm>(`/surveys/forms/${encodeURIComponent(formId)}`, payload),
+    surveystatApi.patch<SurveyForm>(
+      `/surveys/forms/${encodeURIComponent(formId)}`,
+      payload,
+    ),
 
-  updateSurveyQuestionnaireForm: (formId: string, payload: UpdateSurveyQuestionnairePayload) =>
-    surveystatApi.patch<SurveyQuestionnaireForm>(`/surveys/forms/${encodeURIComponent(formId)}/questionnaire`, payload),
+  updateSurveyQuestionnaireForm: (
+    formId: string,
+    payload: UpdateSurveyQuestionnairePayload,
+  ) =>
+    surveystatApi.patch<SurveyQuestionnaireForm>(
+      `/surveys/forms/${encodeURIComponent(formId)}/questionnaire`,
+      payload,
+    ),
 
   deleteSurveyForm: (formId: string) =>
-    surveystatApi.del<SurveyForm>(`/surveys/forms/${encodeURIComponent(formId)}`),
+    surveystatApi.del<SurveyForm>(
+      `/surveys/forms/${encodeURIComponent(formId)}`,
+    ),
 
-  updateSurveyFormRespondentInformation: (formId: string, payload: UpdateSurveyFormRespondentInformationPayload) =>
-    surveystatApi.patch<SurveyForm>(`/surveys/forms/${encodeURIComponent(formId)}/respondent-information`, payload),
+  updateSurveyFormRespondentInformation: (
+    formId: string,
+    payload: UpdateSurveyFormRespondentInformationPayload,
+  ) =>
+    surveystatApi.patch<SurveyForm>(
+      `/surveys/forms/${encodeURIComponent(formId)}/respondent-information`,
+      payload,
+    ),
 
   getQuestionnaireByFormCode: (formCode: SurveyFormCode) =>
     surveystatApi.get<SurveyQuestionnaireForm>(
@@ -723,14 +808,21 @@ export const surveyStatService = {
     ),
 
   getQuestionnaireByFormId: (formId: string) =>
-    surveystatApi.get<SurveyQuestionnaireForm>(`/surveys/questionnaires/${encodeURIComponent(formId)}`),
+    surveystatApi.get<SurveyQuestionnaireForm>(
+      `/surveys/questionnaires/${encodeURIComponent(formId)}`,
+    ),
 
   submitSurveyResponse: (payload: SubmitSurveyResponsePayload) =>
-    surveystatApi.post<SurveyResponse>("/surveys/responses", withAnonymousRespondent(payload)),
+    surveystatApi.post<SurveyResponse>(
+      "/surveys/responses",
+      withAnonymousRespondent(payload),
+    ),
 
   listSurveyResponses: (filters: SurveyResponseFilters = {}) =>
     surveystatApi
-      .get<SurveyResponseSummary[]>(`/surveys/responses${buildQueryString(filters)}`)
+      .get<
+        SurveyResponseSummary[]
+      >(`/surveys/responses${buildQueryString(filters)}`)
       .then(normalizeSurveyResponseSummaryList),
 
   getResponseAnswers: (responseId: string) =>
@@ -739,25 +831,41 @@ export const surveyStatService = {
     ),
 
   resendResponseReviewEmail: (responseId: string) =>
-    surveystatApi.post<{ response: SurveyResponseSummary; answers: SurveyResponseAnswer[] }>(
-      `/surveys/responses/${encodeURIComponent(responseId)}/resend-review`,
-    ),
+    surveystatApi.post<{
+      response: SurveyResponseSummary;
+      answers: SurveyResponseAnswer[];
+    }>(`/surveys/responses/${encodeURIComponent(responseId)}/resend-review`),
 
   deleteSurveyResponse: (responseId: string) =>
-    surveystatApi.del<SurveyResponse>(`/surveys/responses/${encodeURIComponent(responseId)}`),
+    surveystatApi.del<SurveyResponse>(
+      `/surveys/responses/${encodeURIComponent(responseId)}`,
+    ),
 
   getStatisticsSummary: (filters: StatisticsFilters = {}) =>
-    surveystatApi.get<StatisticsSummary>(`/statistics/summary${buildQueryString(filters)}`),
+    surveystatApi.get<StatisticsSummary>(
+      `/statistics/summary${buildQueryString(filters)}`,
+    ),
 
   getFormStatistics: (filters: StatisticsFilters = {}) =>
-    surveystatApi.get<SurveyFormStatistics[]>(`/statistics/forms${buildQueryString(filters)}`),
+    surveystatApi.get<SurveyFormStatistics[]>(
+      `/statistics/forms${buildQueryString(filters)}`,
+    ),
 
   getSectionStatistics: (filters: StatisticsFilters = {}) =>
-    surveystatApi.get<SurveySectionStatistics[]>(`/statistics/sections${buildQueryString(filters)}`),
+    surveystatApi.get<SurveySectionStatistics[]>(
+      `/statistics/sections${buildQueryString(filters)}`,
+    ),
 
   getItemStatistics: (filters: StatisticsFilters = {}) =>
-    surveystatApi.get<SurveyItemStatistics[]>(`/statistics/items${buildQueryString(filters)}`),
+    surveystatApi.get<SurveyItemStatistics[]>(
+      `/statistics/items${buildQueryString(filters)}`,
+    ),
 
-  createManualHardcopyStatistics: (payload: CreateManualHardcopySurveyStatisticsPayload) =>
-    surveystatApi.post<ManualHardcopySurveyStatisticsResult>("/statistics/manual-hardcopy", payload),
-}
+  createManualHardcopyStatistics: (
+    payload: CreateManualHardcopySurveyStatisticsPayload,
+  ) =>
+    surveystatApi.post<ManualHardcopySurveyStatisticsResult>(
+      "/statistics/manual-hardcopy",
+      payload,
+    ),
+};
