@@ -1050,7 +1050,7 @@ export function Statistic() {
                 <div className="min-w-0">
                   <h1 className="wrap-break-word text-2xl font-black tracking-tight sm:text-3xl md:text-4xl">Survey Statistics</h1>
                   <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300 wrap-anywhere">
-                    Select one survey first, then compute combined online and hardcopy descriptive statistics with section means, overall mean, and detailed weighted-mean solution.
+                    Select one survey first, then compute combined online and hardcopy descriptive statistics with section means, overall mean, and detailed weighted-mean solution. Hardcopy survey forms can be tallied directly on this Statistics page.
                   </p>
                 </div>
               </div>
@@ -1107,7 +1107,7 @@ export function Statistic() {
             <div className="min-w-0">
               <h2 className="wrap-break-word text-lg font-black sm:text-xl">Choose Survey to Compute</h2>
               <p className="mt-1 text-sm leading-6 text-slate-500 wrap-anywhere">
-                Statistics can include online responses, encoded hardcopy forms, or both for the same selected survey.
+                Statistics can include online responses, encoded hardcopy forms, or both for the same selected survey. Use Add Hardcopy Results to tally paper survey counts.
               </p>
             </div>
             <span className="max-w-full rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600 wrap-anywhere sm:max-w-sm">

@@ -32,6 +32,7 @@ import {
   SurveyStatApiError,
   surveyStatService,
   type CreateSurveyFormPayload,
+  type RespondentInformationField,
   type StatisticsSummary,
   type SurveyForm,
   type SurveyQuestionnaireSection,
@@ -48,13 +49,98 @@ const features = [
     icon: FileText,
   },
   {
-    title: "Mean and Statistics Results",
+    title: "Online and Hardcopy Tallied Statistics",
     icon: BarChart3,
   },
 ]
 
 const defaultSurveyInstruction =
   "Please read each statement carefully and place a check mark (✓) under the appropriate number that best reflects your evaluation."
+
+const defaultRespondentInformationFields: RespondentInformationField[] = ["fullName", "email", "role"]
+
+const respondentInformationFieldOptions: Array<{
+  value: RespondentInformationField
+  label: string
+  description: string
+}> = [
+  {
+    value: "fullName",
+    label: "Full Name",
+    description: "Respondent name field",
+  },
+  {
+    value: "email",
+    label: "Email",
+    description: "Respondent email address",
+  },
+  {
+    value: "role",
+    label: "Role",
+    description: "Student, faculty, QA personnel, or administrator",
+  },
+  {
+    value: "office",
+    label: "Office",
+    description: "Office, department, or college",
+  },
+  {
+    value: "program",
+    label: "Program",
+    description: "Program, course, or unit",
+  },
+]
+
+function getRespondentInformationFields(fields?: RespondentInformationField[] | null) {
+  const selectedFields = fields?.filter((field) =>
+    respondentInformationFieldOptions.some((option) => option.value === field),
+  ) ?? []
+
+  return Array.from(new Set(selectedFields))
+}
+
+function getCreateRespondentInformationFields(fields: RespondentInformationField[]) {
+  const selectedFields = getRespondentInformationFields(fields)
+
+  return selectedFields.length > 0 ? selectedFields : defaultRespondentInformationFields
+}
+
+function getSurveyRespondentInformationFields(form?: Pick<SurveyForm, "respondentInformationFields"> | null) {
+  const selectedFields = getRespondentInformationFields(form?.respondentInformationFields)
+
+  return selectedFields.length > 0 ? selectedFields : defaultRespondentInformationFields
+}
+
+function getRespondentInformationFieldSummary(fields?: RespondentInformationField[] | null) {
+  const selectedFields = getRespondentInformationFields(fields)
+
+  if (selectedFields.length === 0) {
+    return "No respondent details selected"
+  }
+
+  return selectedFields
+    .map((field) => respondentInformationFieldOptions.find((option) => option.value === field)?.label ?? field)
+    .join(", ")
+}
+
+function toggleRespondentInformationField(
+  fields: RespondentInformationField[],
+  field: RespondentInformationField,
+): RespondentInformationField[] {
+  const currentFields = getRespondentInformationFields(fields)
+
+  if (currentFields.includes(field)) {
+    return currentFields.filter((currentField) => currentField !== field)
+  }
+
+  return [...currentFields, field]
+}
+
+function getSafeRespondentInformationFields(fields: RespondentInformationField[]) {
+  const selectedFields = getCreateRespondentInformationFields(fields)
+
+  return selectedFields.length > 0 ? selectedFields : defaultRespondentInformationFields
+}
 
 function getErrorMessage(error: unknown) {
   if (error instanceof SurveyStatApiError || error instanceof Error) {
@@ -774,6 +860,10 @@ export function Landing() {
   const [editingSurvey, setEditingSurvey] = useState<SurveyForm | null>(null)
   const [editSurveyTitle, setEditSurveyTitle] = useState("")
   const [editSurveyDescription, setEditSurveyDescription] = useState("")
+  const [editRespondentInformationRequired, setEditRespondentInformationRequired] = useState(true)
+  const [editRespondentInformationFields, setEditRespondentInformationFields] = useState<RespondentInformationField[]>(
+    defaultRespondentInformationFields,
+  )
   const [editSurveySections, setEditSurveySections] = useState<EditableExistingSurveySections>([])
   const [isLoadingEditSurvey, setIsLoadingEditSurvey] = useState(false)
   const [isUpdatingSurvey, setIsUpdatingSurvey] = useState(false)
@@ -785,6 +875,9 @@ export function Landing() {
   const [documentReaderMessage, setDocumentReaderMessage] = useState("")
   const [surveyStepCount, setSurveyStepCount] = useState(2)
   const [respondentInformationRequired, setRespondentInformationRequired] = useState(true)
+  const [respondentInformationFields, setRespondentInformationFields] = useState<RespondentInformationField[]>(
+    defaultRespondentInformationFields,
+  )
   const [isCreatingSurvey, setIsCreatingSurvey] = useState(false)
   const [updatingRespondentInfoFormId, setUpdatingRespondentInfoFormId] = useState<string | null>(null)
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false)
@@ -874,6 +967,7 @@ export function Landing() {
     setDocumentReaderMessage("")
     setSurveyStepCount(2)
     setRespondentInformationRequired(true)
+    setRespondentInformationFields(defaultRespondentInformationFields)
     setIsSurveyDocumentDragActive(false)
     setIsCreateSurveyDialogOpen(true)
   }
@@ -897,6 +991,14 @@ export function Landing() {
     })
   }
 
+  function toggleCreateRespondentInformationField(field: RespondentInformationField) {
+    setRespondentInformationFields((current) => toggleRespondentInformationField(current, field))
+  }
+
+  function toggleEditRespondentInformationField(field: RespondentInformationField) {
+    setEditRespondentInformationFields((current) => toggleRespondentInformationField(current, field))
+  }
+
   async function copySurveyShareLink(formCodes: string[]) {
     const shareUrl = getSurveyShareUrl(formCodes)
 
@@ -912,6 +1014,8 @@ export function Landing() {
     setEditingSurvey(form)
     setEditSurveyTitle(form.title)
     setEditSurveyDescription(form.description ?? "")
+    setEditRespondentInformationRequired(form.respondentInformationRequired)
+    setEditRespondentInformationFields(getSurveyRespondentInformationFields(form))
     setEditSurveySections([])
     setIsLoadingEditSurvey(true)
 
@@ -921,6 +1025,8 @@ export function Landing() {
       setEditingSurvey(questionnaire)
       setEditSurveyTitle(questionnaire.title)
       setEditSurveyDescription(questionnaire.description ?? "")
+      setEditRespondentInformationRequired(questionnaire.respondentInformationRequired)
+      setEditRespondentInformationFields(getSurveyRespondentInformationFields(questionnaire))
       setEditSurveySections(getEditableExistingSurveySections(questionnaire.sections))
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -944,6 +1050,7 @@ export function Landing() {
       setCreateSurveyDescription(duplicateDescription)
       setSurveyStepCount(2)
       setRespondentInformationRequired(questionnaire.respondentInformationRequired)
+      setRespondentInformationFields(getSurveyRespondentInformationFields(questionnaire))
       setDocumentSurveyDraft({
         fileName: questionnaire.title,
         title: duplicateTitle,
@@ -970,6 +1077,8 @@ export function Landing() {
     setEditingSurvey(null)
     setEditSurveyTitle("")
     setEditSurveyDescription("")
+    setEditRespondentInformationRequired(true)
+    setEditRespondentInformationFields(defaultRespondentInformationFields)
     setEditSurveySections([])
   }
 
@@ -1145,6 +1254,10 @@ export function Landing() {
       const updatedForm = await surveyStatService.updateSurveyQuestionnaireForm(editingSurvey.id, {
         title,
         description: editSurveyDescription.trim(),
+        respondentInformationRequired: editRespondentInformationRequired,
+        respondentInformationFields: editRespondentInformationRequired
+          ? getSafeRespondentInformationFields(editRespondentInformationFields)
+          : [],
         sections,
       })
 
@@ -1158,6 +1271,8 @@ export function Landing() {
       setEditingSurvey(null)
       setEditSurveyTitle("")
       setEditSurveyDescription("")
+      setEditRespondentInformationRequired(true)
+      setEditRespondentInformationFields(defaultRespondentInformationFields)
       setEditSurveySections([])
       await loadLandingData()
     } catch (error) {
@@ -1208,6 +1323,7 @@ export function Landing() {
     try {
       const updatedForm = await surveyStatService.updateSurveyFormRespondentInformation(form.id, {
         respondentInformationRequired: nextRequired,
+        respondentInformationFields: nextRequired ? getSurveyRespondentInformationFields(form) : [],
       })
 
       setForms((current) => current.map((item) => (item.id === updatedForm.id ? updatedForm : item)))
@@ -1508,6 +1624,9 @@ export function Landing() {
         description: createSurveyDescription.trim() || "Custom Chapter IV survey created by the researcher.",
         instruction: defaultSurveyInstruction,
         respondentInformationRequired,
+        respondentInformationFields: respondentInformationRequired
+          ? getSafeRespondentInformationFields(respondentInformationFields)
+          : [],
         isActive: true,
         surveySeriesId,
         surveySeriesTitle: title,
@@ -1534,6 +1653,7 @@ export function Landing() {
       setDocumentReaderMessage("")
       setSurveyStepCount(2)
       setRespondentInformationRequired(true)
+      setRespondentInformationFields(defaultRespondentInformationFields)
       setIsCreateSurveyDialogOpen(false)
       await loadLandingData()
 
@@ -1780,6 +1900,11 @@ export function Landing() {
                             </p>
                             <h3 className="mt-1 line-clamp-2 max-w-full font-bold wrap-anywhere sm:max-w-none">{form.title}</h3>
                             <p className="mt-1 line-clamp-2 max-w-full text-sm leading-6 text-slate-400 wrap-anywhere sm:max-w-none">{form.description}</p>
+                            {form.respondentInformationRequired ? (
+                              <p className="mt-2 line-clamp-1 max-w-full text-xs font-semibold text-cyan-100 wrap-anywhere sm:max-w-none">
+                                Details: {getRespondentInformationFieldSummary(form.respondentInformationFields)}
+                              </p>
+                            ) : null}
                           </div>
                           <span className="w-fit shrink-0 rounded-full bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-200">
                             {form.respondentInformationRequired ? "Info required" : "Info off"}
@@ -1891,6 +2016,11 @@ export function Landing() {
                       </span>
                       <span className="mt-1 block max-w-full wrap-break-word text-base font-black sm:text-lg">{form.title}</span>
                       <span className="mt-2 line-clamp-3 block max-w-full text-sm leading-6 text-slate-400 wrap-anywhere sm:line-clamp-2">{form.description}</span>
+                      {form.respondentInformationRequired ? (
+                        <span className="mt-2 block max-w-full text-xs font-semibold text-cyan-100 wrap-anywhere">
+                          Respondent details: {getRespondentInformationFieldSummary(form.respondentInformationFields)}
+                        </span>
+                      ) : null}
                     </button>
 
                     <div className="grid w-full shrink-0 grid-cols-1 gap-2 sm:w-auto sm:items-end sm:gap-3">
@@ -2021,6 +2151,52 @@ export function Landing() {
                 placeholder="Describe the research purpose of the survey"
               />
             </label>
+
+            <section className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="wrap-break-word text-sm font-black text-slate-100">Respondent Details</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-400 wrap-anywhere">
+                    Turn this on when the survey needs respondent details, then choose only the fields needed for this survey.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={editRespondentInformationRequired}
+                  onClick={() => setEditRespondentInformationRequired((current) => !current)}
+                  disabled={isLoadingEditSurvey || isUpdatingSurvey}
+                  className={`inline-flex w-full shrink-0 items-center justify-center gap-3 rounded-full px-3 py-2 text-xs font-black uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto ${
+                    editRespondentInformationRequired ? "bg-cyan-400 text-slate-950" : "bg-white/10 text-slate-300"
+                  }`}
+                >
+                  <span
+                    className={`flex h-5 w-10 shrink-0 items-center rounded-full p-0.5 transition ${
+                      editRespondentInformationRequired ? "bg-slate-950/20" : "bg-slate-950/60"
+                    }`}
+                  >
+                    <span
+                      className={`size-4 rounded-full bg-white transition ${
+                        editRespondentInformationRequired ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </span>
+                  {editRespondentInformationRequired ? "On" : "Off"}
+                </button>
+              </div>
+
+              {editRespondentInformationRequired ? (
+                <RespondentInformationFieldSelector
+                  selectedFields={editRespondentInformationFields}
+                  onToggleField={toggleEditRespondentInformationField}
+                  disabled={isLoadingEditSurvey || isUpdatingSurvey}
+                />
+              ) : (
+                <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-sm font-semibold text-slate-300">
+                  Respondent details are turned off for this survey.
+                </p>
+              )}
+            </section>
 
             <section className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
               <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2508,37 +2684,113 @@ export function Landing() {
               </div>
             ) : null}
 
-            <button
-              type="button"
-              role="switch"
-              aria-checked={respondentInformationRequired}
-              onClick={() => setRespondentInformationRequired((current) => !current)}
-              className={`flex w-full max-w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition ${
-                respondentInformationRequired
-                  ? "border-cyan-300 bg-cyan-300/10"
-                  : "border-white/10 bg-white/5 hover:bg-white/10"
-              }`}
-            >
-              <span className="min-w-0">
-                <span className="block wrap-break-word font-black text-white">Respondent Information</span>
-              </span>
-              <span
-                className={`flex h-8 w-16 shrink-0 items-center rounded-full p-1 transition ${
-                  respondentInformationRequired ? "bg-cyan-400" : "bg-white/10"
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={respondentInformationRequired}
+                onClick={() => setRespondentInformationRequired((current) => !current)}
+                className={`flex w-full max-w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition ${
+                  respondentInformationRequired
+                    ? "border-cyan-300 bg-cyan-300/10"
+                    : "border-white/10 bg-white/5 hover:bg-white/10"
                 }`}
               >
+                <span className="min-w-0">
+                  <span className="block wrap-break-word font-black text-white">Respondent Details</span>
+                  <span className="mt-1 block text-sm leading-6 text-slate-300 wrap-anywhere">
+                    Choose the respondent fields that will appear in this survey form.
+                  </span>
+                </span>
                 <span
-                  className={`size-6 rounded-full bg-white transition ${
-                    respondentInformationRequired ? "translate-x-8" : "translate-x-0"
+                  className={`flex h-8 w-16 shrink-0 items-center rounded-full p-1 transition ${
+                    respondentInformationRequired ? "bg-cyan-400" : "bg-white/10"
                   }`}
+                >
+                  <span
+                    className={`size-6 rounded-full bg-white transition ${
+                      respondentInformationRequired ? "translate-x-8" : "translate-x-0"
+                    }`}
+                  />
+                </span>
+              </button>
+
+              {respondentInformationRequired ? (
+                <RespondentInformationFieldSelector
+                  selectedFields={respondentInformationFields}
+                  onToggleField={toggleCreateRespondentInformationField}
                 />
-              </span>
-            </button>
+              ) : (
+                <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-sm font-semibold text-slate-300">
+                  Respondent details will not be shown on this survey.
+                </p>
+              )}
+            </div>
           </div>
         </DialogShell>
       ) : null}
     </main>
   )
 }
+
+
+type RespondentInformationFieldSelectorProps = {
+  selectedFields: RespondentInformationField[]
+  onToggleField: (field: RespondentInformationField) => void
+  disabled?: boolean
+}
+
+function RespondentInformationFieldSelector({
+  selectedFields,
+  onToggleField,
+  disabled = false,
+}: RespondentInformationFieldSelectorProps) {
+  const selectedFieldSet = new Set(getRespondentInformationFields(selectedFields))
+
+  return (
+    <div className="mt-4 space-y-3">
+      <p className="text-xs font-black uppercase tracking-wide text-cyan-200">Select respondent detail fields</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {respondentInformationFieldOptions.map((option) => {
+          const isSelected = selectedFieldSet.has(option.value)
+
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onToggleField(option.value)}
+              disabled={disabled}
+              className={`min-w-0 rounded-2xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                isSelected
+                  ? "border-cyan-300 bg-cyan-300/10 text-cyan-50"
+                  : "border-white/10 bg-slate-950/30 text-slate-300 hover:bg-white/10"
+              }`}
+            >
+              <span className="flex min-w-0 items-start gap-3">
+                <span
+                  className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border ${
+                    isSelected ? "border-cyan-200 bg-cyan-400 text-slate-950" : "border-white/20 bg-white/5"
+                  }`}
+                >
+                  {isSelected ? <CheckCircle2 className="size-3.5" /> : null}
+                </span>
+                <span className="min-w-0">
+                  <span className="block wrap-break-word text-sm font-black">{option.label}</span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-400 wrap-anywhere">{option.description}</span>
+                </span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      {selectedFieldSet.size === 0 ? (
+        <p className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-sm font-semibold text-amber-100">
+          Select at least one respondent detail field before saving.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 
 export default Landing

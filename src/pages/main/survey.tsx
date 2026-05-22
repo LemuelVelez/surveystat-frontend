@@ -24,6 +24,7 @@ import {
   SurveyStatApiError,
   surveyStatService,
   type CreateRespondentPayload,
+  type RespondentInformationField,
   type LikertValue,
   type SurveyQuestionnaireForm,
   type SubmitSurveyAnswerPayload,
@@ -38,6 +39,24 @@ const defaultScale = [
 ]
 
 const respondentRoles = ["Student", "Faculty", "QA Personnel", "Administrator"] as const
+
+const defaultRespondentInformationFields: RespondentInformationField[] = ["fullName", "email", "role"]
+
+const respondentInformationFieldLabels: Record<RespondentInformationField, string> = {
+  fullName: "Full Name",
+  email: "Email",
+  role: "Role",
+  office: "Office",
+  program: "Program",
+}
+
+const respondentInformationFieldPlaceholders: Record<RespondentInformationField, string> = {
+  fullName: "Enter your full name",
+  email: "name@example.com",
+  role: "",
+  office: "Office or department",
+  program: "Program or unit",
+}
 
 type SignatureMode = "draw" | "scan"
 
@@ -78,8 +97,16 @@ function isFilled(value?: string | null) {
   return Boolean(value?.trim())
 }
 
-function hasRequiredRespondentInformation(respondent: CreateRespondentPayload) {
-  return isFilled(respondent.fullName) && isFilled(respondent.email) && isFilled(String(respondent.role ?? ""))
+function getRespondentInformationFields(questionnaire?: Pick<SurveyQuestionnaireForm, "respondentInformationFields"> | null) {
+  const fields = questionnaire?.respondentInformationFields?.filter((field) =>
+    Object.prototype.hasOwnProperty.call(respondentInformationFieldLabels, field),
+  ) ?? []
+
+  return fields.length > 0 ? Array.from(new Set(fields)) : defaultRespondentInformationFields
+}
+
+function hasRequiredRespondentInformation(respondent: CreateRespondentPayload, fields: RespondentInformationField[]) {
+  return fields.every((field) => isFilled(String(respondent[field] ?? "")))
 }
 
 function getInitialRespondent(): CreateRespondentPayload {
@@ -245,7 +272,8 @@ export function Survey() {
   const answeredCount = getAnsweredCount(currentDraft.answers)
   const scale = normalizeScale(currentQuestionnaire?.scale)
   const respondentInformationRequired = currentQuestionnaire?.respondentInformationRequired ?? true
-  const respondentInformationComplete = hasRequiredRespondentInformation(currentDraft.respondent)
+  const respondentInformationFields = getRespondentInformationFields(currentQuestionnaire)
+  const respondentInformationComplete = hasRequiredRespondentInformation(currentDraft.respondent, respondentInformationFields)
   const completedCount = questionnaires.filter((questionnaire) => drafts[questionnaire.code]?.isSubmitted).length
   const surveyCount = questionnaires.length
   const hasMultipleSurveys = surveyCount > 1
@@ -427,7 +455,12 @@ export function Survey() {
       return null
     }
 
-    return currentDraft.respondent
+    return respondentInformationFields.reduce<CreateRespondentPayload>((payload, field) => {
+      payload[field] = currentDraft.respondent[field] ?? null
+      return payload
+    }, {
+      consentGiven: currentDraft.voluntaryConsent,
+    })
   }
 
   async function copyCurrentSurveyShareLink() {
@@ -697,76 +730,78 @@ export function Survey() {
 
                     {(respondentInformationRequired || currentDraft.includeRespondentInformation) ? (
                       <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                        <label className="block">
-                          <span className="text-sm font-bold text-slate-700">
-                            Full Name {respondentInformationRequired ? <span className="text-red-500">*</span> : null}
-                          </span>
-                          <input
+                        {respondentInformationFields.includes("fullName") ? (
+                          <RespondentTextInput
+                            field="fullName"
+                            label={respondentInformationFieldLabels.fullName}
                             value={currentDraft.respondent.fullName ?? ""}
-                            onChange={(event) => updateRespondent("fullName", event.target.value)}
-                            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                            placeholder="Enter your full name"
+                            placeholder={respondentInformationFieldPlaceholders.fullName}
+                            required={respondentInformationRequired}
+                            onChange={updateRespondent}
                           />
-                        </label>
+                        ) : null}
 
-                        <label className="block">
-                          <span className="text-sm font-bold text-slate-700">
-                            Email {respondentInformationRequired ? <span className="text-red-500">*</span> : null}
-                          </span>
-                          <input
-                            type="email"
+                        {respondentInformationFields.includes("email") ? (
+                          <RespondentTextInput
+                            field="email"
+                            label={respondentInformationFieldLabels.email}
                             value={currentDraft.respondent.email ?? ""}
-                            onChange={(event) => updateRespondent("email", event.target.value)}
-                            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                            placeholder="name@example.com"
+                            placeholder={respondentInformationFieldPlaceholders.email}
+                            required={respondentInformationRequired}
+                            type="email"
+                            onChange={updateRespondent}
                           />
-                        </label>
+                        ) : null}
 
-                        <div className="lg:col-span-2">
-                          <span className="text-sm font-bold text-slate-700">
-                            Role {respondentInformationRequired ? <span className="text-red-500">*</span> : null}
-                          </span>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {respondentRoles.map((role) => {
-                              const isSelected = currentDraft.respondent.role === role
+                        {respondentInformationFields.includes("role") ? (
+                          <div className="lg:col-span-2">
+                            <span className="text-sm font-bold text-slate-700">
+                              Role {respondentInformationRequired ? <span className="text-red-500">*</span> : null}
+                            </span>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {respondentRoles.map((role) => {
+                                const isSelected = currentDraft.respondent.role === role
 
-                              return (
-                                <button
-                                  key={role}
-                                  type="button"
-                                  onClick={() => updateRespondent("role", role)}
-                                  className={`max-w-xs truncate rounded-full px-4 py-2 text-sm font-bold transition sm:max-w-none ${
-                                    isSelected
-                                      ? "bg-slate-950 text-white"
-                                      : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
-                                  }`}
-                                >
-                                  {role}
-                                </button>
-                              )
-                            })}
+                                return (
+                                  <button
+                                    key={role}
+                                    type="button"
+                                    onClick={() => updateRespondent("role", role)}
+                                    className={`max-w-xs truncate rounded-full px-4 py-2 text-sm font-bold transition sm:max-w-none ${
+                                      isSelected
+                                        ? "bg-slate-950 text-white"
+                                        : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
+                                    }`}
+                                  >
+                                    {role}
+                                  </button>
+                                )
+                              })}
+                            </div>
                           </div>
-                        </div>
+                        ) : null}
 
-                        <label className="block">
-                          <span className="text-sm font-bold text-slate-700">Office</span>
-                          <input
+                        {respondentInformationFields.includes("office") ? (
+                          <RespondentTextInput
+                            field="office"
+                            label={respondentInformationFieldLabels.office}
                             value={currentDraft.respondent.office ?? ""}
-                            onChange={(event) => updateRespondent("office", event.target.value)}
-                            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                            placeholder="Office or department"
+                            placeholder={respondentInformationFieldPlaceholders.office}
+                            required={respondentInformationRequired}
+                            onChange={updateRespondent}
                           />
-                        </label>
+                        ) : null}
 
-                        <label className="block">
-                          <span className="text-sm font-bold text-slate-700">Program</span>
-                          <input
+                        {respondentInformationFields.includes("program") ? (
+                          <RespondentTextInput
+                            field="program"
+                            label={respondentInformationFieldLabels.program}
                             value={currentDraft.respondent.program ?? ""}
-                            onChange={(event) => updateRespondent("program", event.target.value)}
-                            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
-                            placeholder="Program or unit"
+                            placeholder={respondentInformationFieldPlaceholders.program}
+                            required={respondentInformationRequired}
+                            onChange={updateRespondent}
                           />
-                        </label>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -898,6 +933,42 @@ export function Survey() {
         )}
       </div>
     </main>
+  )
+}
+
+
+type RespondentTextInputProps = {
+  field: Exclude<RespondentInformationField, "role">
+  label: string
+  value: string
+  placeholder: string
+  required: boolean
+  type?: string
+  onChange: <K extends keyof CreateRespondentPayload>(key: K, value: CreateRespondentPayload[K]) => void
+}
+
+function RespondentTextInput({
+  field,
+  label,
+  value,
+  placeholder,
+  required,
+  type = "text",
+  onChange,
+}: RespondentTextInputProps) {
+  return (
+    <label className="block">
+      <span className="text-sm font-bold text-slate-700">
+        {label} {required ? <span className="text-red-500">*</span> : null}
+      </span>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(field, event.target.value)}
+        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100"
+        placeholder={placeholder}
+      />
+    </label>
   )
 }
 

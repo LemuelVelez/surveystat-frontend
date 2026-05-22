@@ -37,6 +37,7 @@ export type SurveyForm = {
   voluntaryNote?: string | null
   signatureLabel?: string | null
   respondentInformationRequired: boolean
+  respondentInformationFields?: RespondentInformationField[]
   isActive: boolean
   createdAt?: string | Date
   updatedAt?: string | Date
@@ -72,6 +73,8 @@ export type SurveyQuestionnaireForm = SurveyForm & {
 }
 
 export type RespondentRole = "Student" | "Faculty" | "QA Personnel" | "Administrator" | string
+
+export type RespondentInformationField = "fullName" | "email" | "role" | "office" | "program"
 
 export type CreateRespondentPayload = {
   fullName?: string | null
@@ -257,6 +260,7 @@ export type CreateSurveyFormPayload = {
   voluntaryNote?: string | null
   signatureLabel?: string | null
   respondentInformationRequired?: boolean
+  respondentInformationFields?: RespondentInformationField[]
   isActive?: boolean
   sections?: CreateSurveySectionPayload[]
 }
@@ -271,11 +275,13 @@ export type UpdateSurveyFormPayload = {
   title?: string
   description?: string | null
   respondentInformationRequired?: boolean
+  respondentInformationFields?: RespondentInformationField[]
   isActive?: boolean
 }
 
 export type UpdateSurveyFormRespondentInformationPayload = {
   respondentInformationRequired: boolean
+  respondentInformationFields?: RespondentInformationField[]
 }
 
 export type UpdateSurveyItemPayload = CreateSurveyItemPayload & {
