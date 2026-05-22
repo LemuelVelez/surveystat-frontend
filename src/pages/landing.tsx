@@ -34,6 +34,8 @@ import {
   type CreateSurveyFormPayload,
   type StatisticsSummary,
   type SurveyForm,
+  type SurveyQuestionnaireSection,
+  type UpdateSurveyQuestionnairePayload,
 } from "@/api/surveystat"
 
 const features = [
@@ -107,6 +109,7 @@ function getDefaultSections(stepNumber: number): CreateSurveyFormPayload["sectio
 
 
 type GeneratedSurveySections = NonNullable<CreateSurveyFormPayload["sections"]>
+type EditableExistingSurveySections = NonNullable<UpdateSurveyQuestionnairePayload["sections"]>
 
 type GeneratedSurveyDraft = {
   fileName: string
@@ -317,6 +320,86 @@ function getCleanGeneratedSectionsForCreate(sections: GeneratedSurveySections): 
     .filter((section) => section.items.length > 0)
 
   return withGeneratedSurveySortOrder(cleanedSections)
+}
+
+function createExistingSurveyItemCode(sectionCode: string, index: number) {
+  return `${sectionCode}_item_${index + 1}`.slice(0, 60)
+}
+
+function getEditableExistingSurveySections(sections: SurveyQuestionnaireSection[]): EditableExistingSurveySections {
+  return sections.map((section, sectionIndex) => ({
+    id: section.id,
+    code: section.code || createGeneratedSectionCode(section.title, sectionIndex),
+    title: section.title,
+    sortOrder: sectionIndex + 1,
+    items: section.items.map((item, itemIndex) => ({
+      id: item.id,
+      code: item.code || createExistingSurveyItemCode(section.code || `section_${sectionIndex + 1}`, itemIndex),
+      statement: item.statement,
+      sortOrder: itemIndex + 1,
+      isRequired: item.isRequired ?? true,
+    })),
+  }))
+}
+
+function getExistingSurveyEditTotals(sections: EditableExistingSurveySections) {
+  return {
+    sectionCount: sections.length,
+    itemCount: sections.reduce((total, section) => total + section.items.length, 0),
+  }
+}
+
+function withExistingSurveySortOrder(sections: EditableExistingSurveySections): EditableExistingSurveySections {
+  return sections.map((section, sectionIndex) => {
+    const sectionTitle = section.title
+    const sectionCode = createCodeFromTitle(section.code || sectionTitle || `section_${sectionIndex + 1}`, `section_${sectionIndex + 1}`)
+
+    return {
+      ...section,
+      code: sectionCode,
+      title: sectionTitle,
+      sortOrder: sectionIndex + 1,
+      items: section.items.map((item, itemIndex) => ({
+        ...item,
+        code: item.code || createExistingSurveyItemCode(sectionCode, itemIndex),
+        sortOrder: itemIndex + 1,
+        isRequired: item.isRequired ?? true,
+      })),
+    }
+  })
+}
+
+function getCleanExistingSurveySectionsForUpdate(
+  sections: EditableExistingSurveySections,
+): EditableExistingSurveySections {
+  return withExistingSurveySortOrder(
+    sections
+      .map((section, sectionIndex) => {
+        const sectionTitle = section.title.trim() || `Survey Section ${sectionIndex + 1}`
+        const sectionCode = createCodeFromTitle(section.code || sectionTitle, `section_${sectionIndex + 1}`)
+        const cleanedItems = section.items
+          .map((item) => ({
+            ...item,
+            statement: item.statement.trim(),
+          }))
+          .filter((item) => item.statement.length > 0)
+          .map((item, itemIndex) => ({
+            ...item,
+            code: item.code || createExistingSurveyItemCode(sectionCode, itemIndex),
+            sortOrder: itemIndex + 1,
+            isRequired: item.isRequired ?? true,
+          }))
+
+        return {
+          ...section,
+          code: sectionCode,
+          title: sectionTitle,
+          sortOrder: sectionIndex + 1,
+          items: cleanedItems,
+        }
+      })
+      .filter((section) => section.items.length > 0),
+  )
 }
 
 function buildSurveySectionsFromText(text: string): GeneratedSurveySections {
@@ -655,6 +738,8 @@ export function Landing() {
   const [editingSurvey, setEditingSurvey] = useState<SurveyForm | null>(null)
   const [editSurveyTitle, setEditSurveyTitle] = useState("")
   const [editSurveyDescription, setEditSurveyDescription] = useState("")
+  const [editSurveySections, setEditSurveySections] = useState<EditableExistingSurveySections>([])
+  const [isLoadingEditSurvey, setIsLoadingEditSurvey] = useState(false)
   const [isUpdatingSurvey, setIsUpdatingSurvey] = useState(false)
   const [deletingSurveyFormId, setDeletingSurveyFormId] = useState<string | null>(null)
   const [documentSurveyDraft, setDocumentSurveyDraft] = useState<GeneratedSurveyDraft | null>(null)
@@ -737,6 +822,7 @@ export function Landing() {
     () => selectedExistingSurveys.map((form) => form.code),
     [selectedExistingSurveys],
   )
+  const editSurveyTotals = useMemo(() => getExistingSurveyEditTotals(editSurveySections), [editSurveySections])
 
   function openExistingSurveysDialog() {
     setSelectedSurveyCodes((current) => (current.length > 0 ? current : forms[0]?.code ? [forms[0].code] : []))
@@ -773,22 +859,187 @@ export function Landing() {
     }
   }
 
-  function openEditExistingSurvey(form: SurveyForm) {
+  async function openEditExistingSurvey(form: SurveyForm) {
     setEditingSurvey(form)
     setEditSurveyTitle(form.title)
     setEditSurveyDescription(form.description ?? "")
+    setEditSurveySections([])
+    setIsLoadingEditSurvey(true)
+
+    try {
+      const questionnaire = await surveyStatService.getQuestionnaireByFormId(form.id)
+
+      setEditingSurvey(questionnaire)
+      setEditSurveyTitle(questionnaire.title)
+      setEditSurveyDescription(questionnaire.description ?? "")
+      setEditSurveySections(getEditableExistingSurveySections(questionnaire.sections))
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setIsLoadingEditSurvey(false)
+    }
   }
 
   function closeEditExistingSurvey() {
-    if (isUpdatingSurvey) return
+    if (isUpdatingSurvey || isLoadingEditSurvey) return
 
     setEditingSurvey(null)
     setEditSurveyTitle("")
     setEditSurveyDescription("")
+    setEditSurveySections([])
+  }
+
+  function updateExistingSurveySections(updater: (sections: EditableExistingSurveySections) => EditableExistingSurveySections) {
+    setEditSurveySections((current) => withExistingSurveySortOrder(updater(current)))
+  }
+
+  function updateExistingSurveySectionTitle(sectionIndex: number, title: string) {
+    updateExistingSurveySections((sections) =>
+      sections.map((section, currentIndex) => (currentIndex === sectionIndex ? { ...section, title } : section)),
+    )
+  }
+
+  function addExistingSurveySection() {
+    updateExistingSurveySections((sections) => {
+      const nextSectionNumber = sections.length + 1
+      const sectionCode = `custom_section_${nextSectionNumber}`
+
+      return [
+        ...sections,
+        {
+          code: sectionCode,
+          title: `Survey Section ${nextSectionNumber}`,
+          sortOrder: nextSectionNumber,
+          items: [
+            {
+              code: `${sectionCode}_item_1`,
+              statement: "New survey checklist item.",
+              sortOrder: 1,
+              isRequired: true,
+            },
+          ],
+        },
+      ]
+    })
+  }
+
+  function removeExistingSurveySection(sectionIndex: number) {
+    updateExistingSurveySections((sections) => {
+      if (sections.length <= 1) return sections
+
+      return sections.filter((_, currentIndex) => currentIndex !== sectionIndex)
+    })
+  }
+
+  function moveExistingSurveySection(sectionIndex: number, direction: -1 | 1) {
+    updateExistingSurveySections((sections) => {
+      const targetIndex = sectionIndex + direction
+
+      if (targetIndex < 0 || targetIndex >= sections.length) {
+        return sections
+      }
+
+      const nextSections = [...sections]
+      const currentSection = nextSections[sectionIndex]
+      nextSections[sectionIndex] = nextSections[targetIndex]
+      nextSections[targetIndex] = currentSection
+
+      return nextSections
+    })
+  }
+
+  function updateExistingSurveyItemStatement(sectionIndex: number, itemIndex: number, statement: string) {
+    updateExistingSurveySections((sections) =>
+      sections.map((section, currentSectionIndex) => {
+        if (currentSectionIndex !== sectionIndex) return section
+
+        return {
+          ...section,
+          items: section.items.map((item, currentItemIndex) =>
+            currentItemIndex === itemIndex ? { ...item, statement } : item,
+          ),
+        }
+      }),
+    )
+  }
+
+  function toggleExistingSurveyItemRequired(sectionIndex: number, itemIndex: number) {
+    updateExistingSurveySections((sections) =>
+      sections.map((section, currentSectionIndex) => {
+        if (currentSectionIndex !== sectionIndex) return section
+
+        return {
+          ...section,
+          items: section.items.map((item, currentItemIndex) =>
+            currentItemIndex === itemIndex ? { ...item, isRequired: !(item.isRequired ?? true) } : item,
+          ),
+        }
+      }),
+    )
+  }
+
+  function addExistingSurveyItem(sectionIndex: number) {
+    updateExistingSurveySections((sections) =>
+      sections.map((section, currentSectionIndex) => {
+        if (currentSectionIndex !== sectionIndex) return section
+
+        const nextItemNumber = section.items.length + 1
+
+        return {
+          ...section,
+          items: [
+            ...section.items,
+            {
+              code: `${section.code}_item_${nextItemNumber}`.slice(0, 60),
+              statement: "New survey checklist item.",
+              sortOrder: nextItemNumber,
+              isRequired: true,
+            },
+          ],
+        }
+      }),
+    )
+  }
+
+  function removeExistingSurveyItem(sectionIndex: number, itemIndex: number) {
+    updateExistingSurveySections((sections) =>
+      sections.map((section, currentSectionIndex) => {
+        if (currentSectionIndex !== sectionIndex || section.items.length <= 1) return section
+
+        return {
+          ...section,
+          items: section.items.filter((_, currentItemIndex) => currentItemIndex !== itemIndex),
+        }
+      }),
+    )
+  }
+
+  function moveExistingSurveyItem(sectionIndex: number, itemIndex: number, direction: -1 | 1) {
+    updateExistingSurveySections((sections) =>
+      sections.map((section, currentSectionIndex) => {
+        if (currentSectionIndex !== sectionIndex) return section
+
+        const targetIndex = itemIndex + direction
+
+        if (targetIndex < 0 || targetIndex >= section.items.length) {
+          return section
+        }
+
+        const nextItems = [...section.items]
+        const currentItem = nextItems[itemIndex]
+        nextItems[itemIndex] = nextItems[targetIndex]
+        nextItems[targetIndex] = currentItem
+
+        return {
+          ...section,
+          items: nextItems,
+        }
+      }),
+    )
   }
 
   async function handleUpdateExistingSurvey() {
-    if (!editingSurvey) return
+    if (!editingSurvey || isLoadingEditSurvey) return
 
     const title = editSurveyTitle.trim()
 
@@ -797,18 +1048,34 @@ export function Landing() {
       return
     }
 
+    const sections = getCleanExistingSurveySectionsForUpdate(editSurveySections)
+
+    if (sections.length === 0 || sections.every((section) => section.items.length === 0)) {
+      toast.error("Please keep at least one survey section and item.")
+      return
+    }
+
     setIsUpdatingSurvey(true)
 
     try {
-      const updatedForm = await surveyStatService.updateSurveyForm(editingSurvey.id, {
+      const updatedForm = await surveyStatService.updateSurveyQuestionnaireForm(editingSurvey.id, {
         title,
         description: editSurveyDescription.trim(),
+        sections,
       })
 
       setForms((current) => current.map((form) => (form.id === updatedForm.id ? updatedForm : form)))
-      setEditingSurvey(updatedForm)
+      setSelectedSurveyCodes((current) => {
+        if (current.includes(updatedForm.code)) return current
+
+        return current.length > 0 ? current : [updatedForm.code]
+      })
       toast.success("Survey updated successfully.")
-      closeEditExistingSurvey()
+      setEditingSurvey(null)
+      setEditSurveyTitle("")
+      setEditSurveyDescription("")
+      setEditSurveySections([])
+      await loadLandingData()
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -1605,7 +1872,7 @@ export function Landing() {
       {editingSurvey ? (
         <DialogShell
           title="Edit Existing Survey"
-          description="Update the selected survey title and description."
+          description="Update the selected survey title, description, sections, and checklist items."
           onClose={closeEditExistingSurvey}
           footer={
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1616,7 +1883,7 @@ export function Landing() {
                 <button
                   type="button"
                   onClick={closeEditExistingSurvey}
-                  disabled={isUpdatingSurvey}
+                  disabled={isUpdatingSurvey || isLoadingEditSurvey}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
                 >
                   Cancel
@@ -1624,7 +1891,7 @@ export function Landing() {
                 <button
                   type="button"
                   onClick={handleUpdateExistingSurvey}
-                  disabled={isUpdatingSurvey}
+                  disabled={isUpdatingSurvey || isLoadingEditSurvey}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 sm:w-auto"
                 >
                   {isUpdatingSurvey ? <Loader2 className="size-4 animate-spin" /> : <Pencil className="size-4" />}
@@ -1640,7 +1907,8 @@ export function Landing() {
               <input
                 value={editSurveyTitle}
                 onChange={(event) => setEditSurveyTitle(event.target.value)}
-                className="mt-2 w-full max-w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10"
+                disabled={isLoadingEditSurvey || isUpdatingSurvey}
+                className="mt-2 w-full max-w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-70"
                 placeholder="Enter survey title"
               />
             </label>
@@ -1650,10 +1918,153 @@ export function Landing() {
               <textarea
                 value={editSurveyDescription}
                 onChange={(event) => setEditSurveyDescription(event.target.value)}
-                className="mt-2 min-h-32 w-full max-w-full resize-y rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10"
+                disabled={isLoadingEditSurvey || isUpdatingSurvey}
+                className="mt-2 min-h-32 w-full max-w-full resize-y rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-70"
                 placeholder="Describe the research purpose of the survey"
               />
             </label>
+
+            <section className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4">
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="wrap-break-word text-sm font-black text-slate-100">Survey Sections and Items</p>
+                  <p className="mt-1 text-sm text-slate-400 wrap-anywhere">
+                    {editSurveyTotals.sectionCount} section{editSurveyTotals.sectionCount === 1 ? "" : "s"} / {editSurveyTotals.itemCount} item{editSurveyTotals.itemCount === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addExistingSurveySection}
+                  disabled={isLoadingEditSurvey || isUpdatingSurvey}
+                  className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full bg-cyan-400/10 px-3 py-2 text-xs font-black uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                >
+                  <Plus className="size-3.5" />
+                  Add Section
+                </button>
+              </div>
+
+              {isLoadingEditSurvey ? (
+                <div className="mt-4 flex min-h-40 items-center justify-center rounded-2xl border border-white/10 bg-slate-950/40">
+                  <Loader2 className="size-7 animate-spin text-cyan-300" />
+                </div>
+              ) : (
+                <div className="mt-4 space-y-4">
+                  {editSurveySections.map((section, sectionIndex) => (
+                    <div key={section.id ?? `${section.code}_${sectionIndex}`} className="rounded-2xl border border-white/10 bg-slate-950/50 p-3 sm:p-4">
+                      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs font-black uppercase tracking-wide text-cyan-200">Section {sectionIndex + 1}</p>
+                        <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center">
+                          <button
+                            type="button"
+                            onClick={() => moveExistingSurveySection(sectionIndex, -1)}
+                            disabled={sectionIndex === 0 || isUpdatingSurvey}
+                            className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 p-2 text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            aria-label="Move section up"
+                          >
+                            <ArrowUp className="size-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveExistingSurveySection(sectionIndex, 1)}
+                            disabled={sectionIndex === editSurveySections.length - 1 || isUpdatingSurvey}
+                            className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 p-2 text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            aria-label="Move section down"
+                          >
+                            <ArrowDown className="size-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeExistingSurveySection(sectionIndex)}
+                            disabled={editSurveySections.length <= 1 || isUpdatingSurvey}
+                            className="inline-flex items-center justify-center rounded-full bg-red-400/10 p-2 text-red-100 transition hover:bg-red-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+                            aria-label="Delete section"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <label className="mt-3 block min-w-0">
+                        <span className="text-xs font-black uppercase tracking-wide text-slate-300">Section Title</span>
+                        <input
+                          value={section.title}
+                          onChange={(event) => updateExistingSurveySectionTitle(sectionIndex, event.target.value)}
+                          disabled={isUpdatingSurvey}
+                          className="mt-2 w-full max-w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-70"
+                          placeholder="Enter section title"
+                        />
+                      </label>
+
+                      <div className="mt-4 space-y-3">
+                        {section.items.map((item, itemIndex) => (
+                          <div key={item.id ?? `${item.code}_${itemIndex}`} className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                            <div className="mb-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <p className="text-xs font-black uppercase tracking-wide text-slate-300">Item {itemIndex + 1}</p>
+                              <div className="grid grid-cols-4 gap-2 sm:flex sm:items-center">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExistingSurveyItemRequired(sectionIndex, itemIndex)}
+                                  disabled={isUpdatingSurvey}
+                                  className={`inline-flex items-center justify-center rounded-full px-3 py-2 text-xs font-black uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                    item.isRequired ?? true ? "bg-cyan-400 text-slate-950" : "bg-white/10 text-slate-300"
+                                  }`}
+                                >
+                                  {item.isRequired ?? true ? "Required" : "Optional"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveExistingSurveyItem(sectionIndex, itemIndex, -1)}
+                                  disabled={itemIndex === 0 || isUpdatingSurvey}
+                                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 p-2 text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                                  aria-label="Move item up"
+                                >
+                                  <ArrowUp className="size-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveExistingSurveyItem(sectionIndex, itemIndex, 1)}
+                                  disabled={itemIndex === section.items.length - 1 || isUpdatingSurvey}
+                                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 p-2 text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                                  aria-label="Move item down"
+                                >
+                                  <ArrowDown className="size-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeExistingSurveyItem(sectionIndex, itemIndex)}
+                                  disabled={section.items.length <= 1 || isUpdatingSurvey}
+                                  className="inline-flex items-center justify-center rounded-full bg-red-400/10 p-2 text-red-100 transition hover:bg-red-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                  aria-label="Delete item"
+                                >
+                                  <Trash2 className="size-4" />
+                                </button>
+                              </div>
+                            </div>
+                            <textarea
+                              value={item.statement}
+                              onChange={(event) => updateExistingSurveyItemStatement(sectionIndex, itemIndex, event.target.value)}
+                              disabled={isUpdatingSurvey}
+                              className="min-h-24 w-full max-w-full resize-y rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300 focus:ring-4 focus:ring-cyan-300/10 disabled:cursor-not-allowed disabled:opacity-70"
+                              placeholder="Enter survey checklist item statement"
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => addExistingSurveyItem(sectionIndex)}
+                        disabled={isUpdatingSurvey}
+                        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        <Plus className="size-4" />
+                        Add Item
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
         </DialogShell>
       ) : null}

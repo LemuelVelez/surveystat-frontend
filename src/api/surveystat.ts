@@ -278,6 +278,19 @@ export type UpdateSurveyFormRespondentInformationPayload = {
   respondentInformationRequired: boolean
 }
 
+export type UpdateSurveyItemPayload = CreateSurveyItemPayload & {
+  id?: string | null
+}
+
+export type UpdateSurveySectionPayload = Omit<CreateSurveySectionPayload, "items"> & {
+  id?: string | null
+  items: UpdateSurveyItemPayload[]
+}
+
+export type UpdateSurveyQuestionnairePayload = UpdateSurveyFormPayload & {
+  sections?: UpdateSurveySectionPayload[]
+}
+
 export type StatisticsFilters = {
   formId?: string
   formCode?: SurveyFormCode
@@ -699,6 +712,9 @@ export const surveyStatService = {
 
   updateSurveyForm: (formId: string, payload: UpdateSurveyFormPayload) =>
     surveystatApi.patch<SurveyForm>(`/surveys/forms/${encodeURIComponent(formId)}`, payload),
+
+  updateSurveyQuestionnaireForm: (formId: string, payload: UpdateSurveyQuestionnairePayload) =>
+    surveystatApi.patch<SurveyQuestionnaireForm>(`/surveys/forms/${encodeURIComponent(formId)}/questionnaire`, payload),
 
   deleteSurveyForm: (formId: string) =>
     surveystatApi.del<SurveyForm>(`/surveys/forms/${encodeURIComponent(formId)}`),
