@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react"
-import { Download, FileSpreadsheet, Loader2, Maximize2, X } from "lucide-react"
+import { useEffect, useState, type ReactNode } from "react"
+import { Check, Download, FileSpreadsheet, Loader2, Maximize2, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { downloadStatisticsWorkbook } from "@/lib/exportExcel"
@@ -670,6 +670,13 @@ export function Preview<T extends object>({
   const [isExportingImage, setIsExportingImage] = useState(false)
   const [isWritingWorkbook, setIsWritingWorkbook] = useState(false)
   const [activeSheetIndex, setActiveSheetIndex] = useState(0)
+  const [selectedWorkbookSheets, setSelectedWorkbookSheets] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    setSelectedWorkbookSheets(new Set(workbookSheets?.map((sheet) => sheet.name) ?? []))
+  }, [isOpen, workbookSheets])
 
   if (!isOpen) {
     return null
@@ -677,6 +684,7 @@ export function Preview<T extends object>({
 
   const safeFileName = sanitizeFileName(fileName || title)
   const hasWorkbook = Boolean(workbookSheets?.length)
+  const selectedSheets = workbookSheets?.filter((sheet) => selectedWorkbookSheets.has(sheet.name)) ?? []
   const safeActiveSheetIndex = workbookSheets?.length
     ? Math.min(activeSheetIndex, workbookSheets.length - 1)
     : 0
@@ -756,14 +764,39 @@ export function Preview<T extends object>({
     }
   }
 
+  function toggleWorkbookSheet(sheetName: string) {
+    setSelectedWorkbookSheets((current) => {
+      const next = new Set(current)
+
+      if (next.has(sheetName)) {
+        next.delete(sheetName)
+      } else {
+        next.add(sheetName)
+      }
+
+      return next
+    })
+  }
+
+  function selectAllWorkbookSheets() {
+    setSelectedWorkbookSheets(new Set(workbookSheets?.map((sheet) => sheet.name) ?? []))
+  }
+
+  function clearWorkbookSheetSelection() {
+    setSelectedWorkbookSheets(new Set())
+  }
+
   async function downloadWorkbook() {
-    if (!workbookSheets?.length) return
+    if (!selectedSheets.length) {
+      toast.error("Select at least one sheet to export.")
+      return
+    }
 
     setIsWritingWorkbook(true)
 
     try {
-      await downloadStatisticsWorkbook(workbookSheets, workbookFileName || `${safeFileName}.xlsx`)
-      toast.success("Spreadsheet downloaded successfully.")
+      await downloadStatisticsWorkbook(selectedSheets, workbookFileName || `${safeFileName}.xlsx`)
+      toast.success(`${selectedSheets.length} sheet${selectedSheets.length === 1 ? "" : "s"} downloaded successfully.`)
     } catch (error) {
       console.error(error)
       toast.error("Unable to download the spreadsheet.")
@@ -773,7 +806,7 @@ export function Preview<T extends object>({
   }
 
   const isImageDownloadDisabled = isLoading || isExportingImage || isWritingWorkbook
-  const isWorkbookDownloadDisabled = isLoading || isWritingWorkbook
+  const isWorkbookDownloadDisabled = isLoading || isWritingWorkbook || selectedSheets.length === 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 px-3 py-3 backdrop-blur-sm sm:items-center sm:px-4 sm:py-6" role="dialog" aria-modal="true">
@@ -824,6 +857,58 @@ export function Preview<T extends object>({
 
         {hasWorkbook ? (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wider text-slate-500">Export sheets</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-700">
+                    Choose exactly which sheets will be included in the downloaded workbook.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
+                  <span className="mr-1 tabular-nums">{selectedSheets.length} of {workbookSheets?.length ?? 0} selected</span>
+                  <button
+                    type="button"
+                    onClick={selectAllWorkbookSheets}
+                    disabled={selectedSheets.length === (workbookSheets?.length ?? 0)}
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-slate-700 transition hover:border-cyan-300 hover:text-cyan-800 disabled:cursor-default disabled:opacity-50"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearWorkbookSheetSelection}
+                    disabled={selectedSheets.length === 0}
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-slate-700 transition hover:border-cyan-300 hover:text-cyan-800 disabled:cursor-default disabled:opacity-50"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {workbookSheets?.map((sheet) => {
+                  const selected = selectedWorkbookSheets.has(sheet.name)
+
+                  return (
+                    <button
+                      key={sheet.name}
+                      type="button"
+                      onClick={() => toggleWorkbookSheet(sheet.name)}
+                      aria-pressed={selected}
+                      className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold transition ${selected ? "border-cyan-300 bg-cyan-50 text-cyan-900" : "border-slate-300 bg-white text-slate-500 hover:border-slate-400 hover:text-slate-700"}`}
+                    >
+                      <span className={`flex size-4 items-center justify-center rounded border ${selected ? "border-cyan-600 bg-cyan-600 text-white" : "border-slate-300 bg-white"}`}>
+                        {selected ? <Check className="size-3" strokeWidth={3} /> : null}
+                      </span>
+                      {sheet.name}
+                    </button>
+                  )
+                })}
+              </div>
+              {selectedSheets.length === 0 ? (
+                <p className="mt-2 text-xs font-bold text-amber-700">Select at least one sheet to enable the .xlsx download.</p>
+              ) : null}
+            </div>
             <div className="shrink-0 overflow-x-auto border-b border-slate-200 bg-white px-4 pt-3 sm:px-6">
               <div className="flex min-w-max gap-2">
                 {workbookSheets?.map((sheet, sheetIndex) => (
