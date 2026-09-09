@@ -37,6 +37,7 @@ import {
   type SurveySectionStatistics,
 } from "@/api/surveystat"
 import Preview, { type PreviewColumn, type PreviewSummaryItem } from "@/components/preview"
+import { buildStatisticsWorkbook } from "@/lib/statisticsWorkbook"
 
 ModuleRegistry.registerModules([AllCommunityModule])
 
@@ -72,6 +73,19 @@ type SectionSolution = {
   distribution: LikertDistribution
   hasFrequencyDistribution: boolean
   steps: CalculationStep[]
+}
+
+
+function createStatisticsWorkbookFileName(formCode: string, sourceLabel: string, generatedAt: Date) {
+  const slugify = (value: string) => value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "all"
+  const pad = (value: number) => String(value).padStart(2, "0")
+  const stamp = `${generatedAt.getFullYear()}${pad(generatedAt.getMonth() + 1)}${pad(generatedAt.getDate())}-${pad(generatedAt.getHours())}${pad(generatedAt.getMinutes())}`
+
+  return `surveystat-${slugify(formCode || "statistics")}-${slugify(sourceLabel)}-${stamp}.xlsx`
 }
 
 type PlotlyChartProps = {
@@ -723,6 +737,35 @@ export function Statistic() {
     sourceBreakdown,
     onlineRespondentCount,
   )
+  const statisticsWorkbook = useMemo(() => {
+    const generatedAt = new Date()
+
+    return {
+      sheets: buildStatisticsWorkbook({
+        formTitle: selectedFormTitle,
+        formCode: selectedFormCode,
+        responseSourceLabel: selectedSourceLabel,
+        summary,
+        sectionStatistics,
+        itemStatistics,
+        surveyResponses,
+        totalResponseCount,
+        totalRespondentCount,
+        generatedAt,
+      }),
+      fileName: createStatisticsWorkbookFileName(selectedFormCode, selectedSourceLabel, generatedAt),
+    }
+  }, [
+    itemStatistics,
+    sectionStatistics,
+    selectedFormCode,
+    selectedFormTitle,
+    selectedSourceLabel,
+    summary,
+    surveyResponses,
+    totalRespondentCount,
+    totalResponseCount,
+  ])
   const manualQuestionnaireItems = useMemo(() => getQuestionnaireItems(manualQuestionnaire), [manualQuestionnaire])
   const overallResultNarrative = getOverallResultNarrative(
     summary,
@@ -1082,7 +1125,7 @@ export function Statistic() {
                 className="inline-flex w-full min-w-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300 sm:px-5"
               >
                 <Eye className="size-4 shrink-0" />
-                <span className="truncate">Preview Image Result</span>
+                <span className="truncate">Preview & Export Result</span>
               </button>
               <button
                 type="button"
@@ -1318,12 +1361,14 @@ export function Statistic() {
       <Preview
         isOpen={isPreviewOpen}
         title={`Statistics Preview · ${selectedFormTitle}`}
-        subtitle="Image export with overall mean, section means, detailed solutions, and item-level statistics"
+        subtitle="Spreadsheet preview with tally, summaries, statistical solutions, source breakdown, and raw responses when available"
         fileName={`${selectedFormCode || "statistics"}-survey-statistics`}
         summary={statisticsPreviewSummary}
         rows={statisticsPreviewRows}
         columns={statisticsPreviewColumns}
         isLoading={isComputing}
+        workbookSheets={statisticsWorkbook.sheets}
+        workbookFileName={statisticsWorkbook.fileName}
         onClose={() => setIsPreviewOpen(false)}
       >
         <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">

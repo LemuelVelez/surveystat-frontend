@@ -1,5 +1,9 @@
 import { useState, type ReactNode } from "react"
-import { Download, Maximize2, X } from "lucide-react"
+import { Download, FileSpreadsheet, Loader2, Maximize2, X } from "lucide-react"
+import { toast } from "sonner"
+
+import { downloadStatisticsWorkbook } from "@/lib/exportExcel"
+import type { WorkbookCell, WorkbookSheet } from "@/lib/statisticsWorkbook"
 
 export type PreviewColumn<T extends object> = {
   key: keyof T | string
@@ -26,6 +30,8 @@ type PreviewProps<T extends object> = {
   columns: PreviewColumn<T>[]
   isLoading?: boolean
   children?: ReactNode
+  workbookSheets?: WorkbookSheet[]
+  workbookFileName?: string
   onClose: () => void
 }
 
@@ -475,6 +481,156 @@ function downloadDataUrl(dataUrl: string, fileName: string) {
   link.remove()
 }
 
+function columnLetter(index: number) {
+  let value = index + 1
+  let result = ""
+
+  while (value > 0) {
+    const remainder = (value - 1) % 26
+    result = String.fromCharCode(65 + remainder) + result
+    value = Math.floor((value - 1) / 26)
+  }
+
+  return result
+}
+
+function isWorkbookSubtotalRow(row: WorkbookCell[]) {
+  return typeof row[0] === "string" && row[0].startsWith("Subtotal ·")
+}
+
+function isWorkbookGrandTotalRow(row: WorkbookCell[]) {
+  return row[0] === "Grand Total / Overall"
+}
+
+function isWorkbookBlockLabelRow(row: WorkbookCell[]) {
+  return row[0] === "Percentage Distribution"
+}
+
+function isWorkbookPercentageRow(sheet: WorkbookSheet, rowIndex: number) {
+  if (sheet.name !== "Tally") return false
+
+  const blockIndex = sheet.rows.findIndex(isWorkbookBlockLabelRow)
+  return blockIndex >= 0 && rowIndex > blockIndex
+}
+
+function formatWorkbookCell(sheet: WorkbookSheet, rowIndex: number, columnIndex: number, value: WorkbookCell) {
+  if (value === null || value === "") return "—"
+  if (typeof value !== "number") return value
+
+  if (isWorkbookPercentageRow(sheet, rowIndex) && columnIndex >= 3 && columnIndex <= 7) {
+    return `${value.toFixed(2)}%`
+  }
+
+  const numFmt = sheet.columns[columnIndex]?.numFmt
+  if (numFmt === "0.00") return value.toFixed(2)
+  if (numFmt === "0") return value.toFixed(0)
+  return String(value)
+}
+
+function SpreadsheetPreview({ sheet }: { sheet: WorkbookSheet }) {
+  const visibleRows = sheet.rows.slice(0, 300)
+  const hasMoreRows = sheet.rows.length > visibleRows.length
+
+  return (
+    <div>
+      <div className="max-w-full overflow-auto rounded-2xl border border-slate-300 bg-white">
+        <table className="min-w-max border-separate border-spacing-0 text-xs text-slate-700">
+          <colgroup>
+            <col className="w-12" />
+            {sheet.columns.map((column) => (
+              <col key={column.header} style={{ width: `${Math.min(Math.max(column.width ?? 16, 12), 60)}ch` }} />
+            ))}
+          </colgroup>
+          <thead>
+            <tr className="sticky top-0 z-30 bg-slate-100 text-center font-bold text-slate-500">
+              <th className="sticky left-0 z-40 h-8 border-b border-r border-slate-300 bg-slate-200" />
+              {sheet.columns.map((column, columnIndex) => (
+                <th key={column.header} className="h-8 border-b border-r border-slate-300 px-3 tabular-nums">
+                  {columnLetter(columnIndex)}
+                </th>
+              ))}
+            </tr>
+            <tr>
+              <th className="sticky left-0 z-20 border-b border-r border-slate-300 bg-slate-100 px-2 text-center font-bold text-slate-500">1</th>
+              <th colSpan={sheet.columns.length} className="border-b border-r border-slate-700 bg-slate-950 px-4 py-3 text-left text-sm font-black text-white">
+                {sheet.title}
+              </th>
+            </tr>
+            <tr className="sticky top-8 z-20 bg-cyan-600 text-white">
+              <th className="sticky left-0 z-30 border-b border-r border-cyan-700 bg-slate-100 px-2 text-center font-bold text-slate-500">2</th>
+              {sheet.columns.map((column) => (
+                <th key={column.header} className="border-b border-r border-cyan-700 px-3 py-2.5 text-center font-black whitespace-normal">
+                  {column.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {visibleRows.length > 0 ? (
+              visibleRows.map((row, rowIndex) => {
+                const subtotal = isWorkbookSubtotalRow(row)
+                const grandTotal = isWorkbookGrandTotalRow(row)
+                const blockLabel = isWorkbookBlockLabelRow(row)
+                const rowClass = grandTotal
+                  ? "bg-cyan-800 font-black text-white"
+                  : subtotal
+                    ? "bg-cyan-50 font-black text-cyan-900"
+                    : blockLabel
+                      ? "bg-cyan-50 font-black text-cyan-700"
+                      : rowIndex % 2 === 0
+                        ? "bg-white"
+                        : "bg-slate-50"
+
+                return (
+                  <tr key={rowIndex} className={rowClass}>
+                    <th className={`sticky left-0 z-10 border-b border-r border-slate-300 px-2 py-2 text-center font-bold tabular-nums ${grandTotal ? "bg-cyan-800 text-white" : subtotal || blockLabel ? "bg-cyan-50 text-cyan-900" : "bg-slate-100 text-slate-500"}`}>
+                      {rowIndex + 3}
+                    </th>
+                    {sheet.columns.map((column, columnIndex) => {
+                      const value = row[columnIndex] ?? null
+                      const numeric = typeof value === "number"
+                      const align = column.align ?? (numeric ? "right" : "left")
+
+                      return (
+                        <td
+                          key={`${rowIndex}-${columnIndex}`}
+                          className={`border-b border-r border-slate-200 px-3 py-2 align-top whitespace-normal ${numeric ? "tabular-nums" : ""}`}
+                          style={{ textAlign: align }}
+                        >
+                          {formatWorkbookCell(sheet, rowIndex, columnIndex, value)}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })
+            ) : (
+              <tr>
+                <th className="sticky left-0 z-10 border-b border-r border-slate-300 bg-slate-100 px-2 py-6 text-center font-bold text-slate-500">3</th>
+                <td colSpan={sheet.columns.length} className="border-b border-r border-slate-200 px-4 py-6 text-center font-semibold text-slate-500">
+                  No data rows available.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {hasMoreRows ? (
+        <p className="mt-3 text-sm font-semibold text-slate-500">
+          Showing 300 of {sheet.rows.length} rows — full data included in the download
+        </p>
+      ) : null}
+
+      {sheet.notes?.length ? (
+        <div className="mt-4 space-y-1 rounded-2xl bg-slate-50 p-4 text-xs leading-5 text-slate-500">
+          {sheet.notes.map((note) => <p key={note}>{note}</p>)}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function Preview<T extends object>({
   isOpen,
   title,
@@ -485,15 +641,24 @@ export function Preview<T extends object>({
   columns,
   isLoading = false,
   children,
+  workbookSheets,
+  workbookFileName,
   onClose,
 }: PreviewProps<T>) {
   const [isExportingImage, setIsExportingImage] = useState(false)
+  const [isWritingWorkbook, setIsWritingWorkbook] = useState(false)
+  const [activeSheetIndex, setActiveSheetIndex] = useState(0)
 
   if (!isOpen) {
     return null
   }
 
   const safeFileName = sanitizeFileName(fileName || title)
+  const hasWorkbook = Boolean(workbookSheets?.length)
+  const safeActiveSheetIndex = workbookSheets?.length
+    ? Math.min(activeSheetIndex, workbookSheets.length - 1)
+    : 0
+  const activeSheet = workbookSheets?.[safeActiveSheetIndex]
 
   async function downloadImage() {
     if (typeof document === "undefined") return
@@ -569,7 +734,24 @@ export function Preview<T extends object>({
     }
   }
 
-  const isDownloadDisabled = isLoading || isExportingImage
+  async function downloadWorkbook() {
+    if (!workbookSheets?.length) return
+
+    setIsWritingWorkbook(true)
+
+    try {
+      await downloadStatisticsWorkbook(workbookSheets, workbookFileName || `${safeFileName}.xlsx`)
+      toast.success("Spreadsheet downloaded successfully.")
+    } catch (error) {
+      console.error(error)
+      toast.error("Unable to download the spreadsheet.")
+    } finally {
+      setIsWritingWorkbook(false)
+    }
+  }
+
+  const isImageDownloadDisabled = isLoading || isExportingImage || isWritingWorkbook
+  const isWorkbookDownloadDisabled = isLoading || isWritingWorkbook
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 px-3 py-3 backdrop-blur-sm sm:items-center sm:px-4 sm:py-6" role="dialog" aria-modal="true">
@@ -587,11 +769,22 @@ export function Preview<T extends object>({
           </div>
 
           <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap">
+            {hasWorkbook ? (
+              <button
+                type="button"
+                onClick={() => void downloadWorkbook()}
+                disabled={isWorkbookDownloadDisabled}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-2.5 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 sm:w-auto"
+              >
+                {isWritingWorkbook ? <Loader2 className="size-4 animate-spin" /> : <FileSpreadsheet className="size-4" />}
+                {isWritingWorkbook ? "Building spreadsheet…" : "Download .xlsx"}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => void downloadImage()}
-              disabled={isDownloadDisabled}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-4 py-2.5 text-sm font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 sm:w-auto"
+              disabled={isImageDownloadDisabled}
+              className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300 sm:w-auto ${hasWorkbook ? "border border-white/10 bg-white/10 text-white hover:bg-white/20" : "bg-cyan-400 text-slate-950 hover:bg-cyan-300"}`}
             >
               <Download className="size-4" />
               {isExportingImage ? "Creating Image..." : "Download Image"}
@@ -607,64 +800,90 @@ export function Preview<T extends object>({
           </div>
         </div>
 
-        <div className="overflow-y-auto p-4 sm:p-6">
-          {summary.length > 0 ? (
-            <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {summary.map((item) => (
-                <div key={item.label} className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
-                  <p className="max-w-xs truncate text-xs font-black uppercase tracking-wide text-cyan-700 sm:max-w-none">{item.label}</p>
-                  <div className="mt-2 max-w-xs text-lg font-black text-slate-950 wrap-anywhere sm:max-w-none">{item.value ?? "—"}</div>
-                </div>
-              ))}
+        {hasWorkbook ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="shrink-0 overflow-x-auto border-b border-slate-200 bg-white px-4 pt-3 sm:px-6">
+              <div className="flex min-w-max gap-2">
+                {workbookSheets?.map((sheet, sheetIndex) => (
+                  <button
+                    key={sheet.name}
+                    type="button"
+                    onClick={() => setActiveSheetIndex(sheetIndex)}
+                    className={`rounded-t-xl border border-b-0 px-4 py-2.5 text-sm font-bold transition ${safeActiveSheetIndex === sheetIndex ? "border-cyan-200 bg-cyan-50 text-cyan-800" : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"}`}
+                  >
+                    {sheet.name} <span className="ml-1 tabular-nums text-xs opacity-70">({sheet.rows.length})</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : null}
-
-          {children}
-
-          <div className="overflow-hidden rounded-2xl border border-slate-200">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    {columns.map((column) => (
-                      <th key={String(column.key)} className="px-4 py-3 font-black text-slate-700">
-                        {column.header}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {isLoading ? (
-                    <tr>
-                      <td colSpan={columns.length} className="px-4 py-8 text-center font-semibold text-slate-500">
-                        Loading preview...
-                      </td>
-                    </tr>
-                  ) : rows.length > 0 ? (
-                    rows.map((row, rowIndex) => (
-                      <tr key={rowIndex} className="align-top">
-                        {columns.map((column) => (
-                          <td key={String(column.key)} className="max-w-xs px-4 py-3 text-slate-700 wrap-anywhere">
-                            {(() => {
-                              const renderedValue = getRenderedCellValue(row, column, rowIndex)
-                              return renderedValue === "" || renderedValue === null || renderedValue === undefined ? "—" : renderedValue
-                            })()}
-                          </td>
-                        ))}
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={columns.length} className="px-4 py-8 text-center font-semibold text-slate-500">
-                        No preview rows available.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+              {isLoading ? (
+                <div className="rounded-2xl border border-slate-200 px-4 py-10 text-center font-semibold text-slate-500">Loading preview...</div>
+              ) : activeSheet ? (
+                <SpreadsheetPreview sheet={activeSheet} />
+              ) : null}
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="overflow-y-auto p-4 sm:p-6">
+            {summary.length > 0 ? (
+              <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {summary.map((item) => (
+                  <div key={item.label} className="rounded-2xl border border-cyan-100 bg-cyan-50 p-4">
+                    <p className="max-w-xs truncate text-xs font-black uppercase tracking-wide text-cyan-700 sm:max-w-none">{item.label}</p>
+                    <div className="mt-2 max-w-xs text-lg font-black text-slate-950 wrap-anywhere sm:max-w-none">{item.value ?? "—"}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {children}
+
+            <div className="overflow-hidden rounded-2xl border border-slate-200">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      {columns.map((column) => (
+                        <th key={String(column.key)} className="px-4 py-3 font-black text-slate-700">
+                          {column.header}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {isLoading ? (
+                      <tr>
+                        <td colSpan={columns.length} className="px-4 py-8 text-center font-semibold text-slate-500">
+                          Loading preview...
+                        </td>
+                      </tr>
+                    ) : rows.length > 0 ? (
+                      rows.map((row, rowIndex) => (
+                        <tr key={rowIndex} className="align-top">
+                          {columns.map((column) => (
+                            <td key={String(column.key)} className="max-w-xs px-4 py-3 text-slate-700 wrap-anywhere">
+                              {(() => {
+                                const renderedValue = getRenderedCellValue(row, column, rowIndex)
+                                return renderedValue === "" || renderedValue === null || renderedValue === undefined ? "—" : renderedValue
+                              })()}
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={columns.length} className="px-4 py-8 text-center font-semibold text-slate-500">
+                          No preview rows available.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
