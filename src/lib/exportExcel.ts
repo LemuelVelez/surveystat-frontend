@@ -92,7 +92,7 @@ function calculateColumnWidth(sheet: WorkbookSheet, columnIndex: number) {
     sheet.columns[columnIndex]?.header ?? "",
     ...sheet.rows.map((row) => row[columnIndex] ?? ""),
   ]
-  const longest = values.reduce((maximum, value) => Math.max(maximum, cellText(value).length), 0)
+  const longest = values.reduce<number>((maximum, value) => Math.max(maximum, cellText(value).length), 0)
   const width = configuredWidth ?? longest + 2
 
   return Math.min(Math.max(width, MIN_COLUMN_WIDTH), MAX_COLUMN_WIDTH)
