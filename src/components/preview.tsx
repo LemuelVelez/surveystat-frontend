@@ -503,7 +503,24 @@ function isWorkbookGrandTotalRow(row: WorkbookCell[]) {
 }
 
 function isWorkbookBlockLabelRow(row: WorkbookCell[]) {
-  return row[0] === "Percentage Distribution"
+  return typeof row[0] === "string" && row[0].startsWith("Percentage Distribution")
+}
+
+function isWorkbookCoverSectionRow(sheet: WorkbookSheet, row: WorkbookCell[]) {
+  return sheet.name === "Cover"
+    && typeof row[0] === "string"
+    && ["Report Information", "At a Glance", "Likert Scale Guide"].includes(row[0])
+    && (row[1] ?? "") === ""
+}
+
+function isWorkbookSectionRow(sheet: WorkbookSheet, row: WorkbookCell[]) {
+  return isWorkbookBlockLabelRow(row) || isWorkbookCoverSectionRow(sheet, row)
+}
+
+function isWorkbookKeyMetricColumn(sheet: WorkbookSheet, columnIndex: number) {
+  if (sheet.name === "Cover" || sheet.name === "Solution" || sheet.name === "Raw Responses") return false
+
+  return /weighted mean|interpretation|rank/i.test(sheet.columns[columnIndex]?.header ?? "")
 }
 
 function isWorkbookPercentageRow(sheet: WorkbookSheet, rowIndex: number) {
@@ -570,12 +587,12 @@ function SpreadsheetPreview({ sheet }: { sheet: WorkbookSheet }) {
               visibleRows.map((row, rowIndex) => {
                 const subtotal = isWorkbookSubtotalRow(row)
                 const grandTotal = isWorkbookGrandTotalRow(row)
-                const blockLabel = isWorkbookBlockLabelRow(row)
+                const sectionRow = isWorkbookSectionRow(sheet, row)
                 const rowClass = grandTotal
                   ? "bg-cyan-800 font-black text-white"
                   : subtotal
                     ? "bg-cyan-50 font-black text-cyan-900"
-                    : blockLabel
+                    : sectionRow
                       ? "bg-cyan-50 font-black text-cyan-700"
                       : rowIndex % 2 === 0
                         ? "bg-white"
@@ -583,18 +600,23 @@ function SpreadsheetPreview({ sheet }: { sheet: WorkbookSheet }) {
 
                 return (
                   <tr key={rowIndex} className={rowClass}>
-                    <th className={`sticky left-0 z-10 border-b border-r border-slate-300 px-2 py-2 text-center font-bold tabular-nums ${grandTotal ? "bg-cyan-800 text-white" : subtotal || blockLabel ? "bg-cyan-50 text-cyan-900" : "bg-slate-100 text-slate-500"}`}>
+                    <th className={`sticky left-0 z-10 border-b border-r border-slate-300 px-2 py-2 text-center font-bold tabular-nums ${grandTotal ? "bg-cyan-800 text-white" : subtotal || sectionRow ? "bg-cyan-50 text-cyan-900" : "bg-slate-100 text-slate-500"}`}>
                       {rowIndex + 3}
                     </th>
-                    {sheet.columns.map((column, columnIndex) => {
+                    {sectionRow ? (
+                      <td colSpan={sheet.columns.length} className="border-b border-r border-cyan-200 px-4 py-2.5 text-left font-black text-cyan-800">
+                        {formatWorkbookCell(sheet, rowIndex, 0, row[0] ?? null)}
+                      </td>
+                    ) : sheet.columns.map((column, columnIndex) => {
                       const value = row[columnIndex] ?? null
                       const numeric = typeof value === "number"
                       const align = column.align ?? (numeric ? "right" : "left")
+                      const keyMetric = isWorkbookKeyMetricColumn(sheet, columnIndex) && !subtotal && !grandTotal
 
                       return (
                         <td
                           key={`${rowIndex}-${columnIndex}`}
-                          className={`border-b border-r border-slate-200 px-3 py-2 align-top whitespace-normal ${numeric ? "tabular-nums" : ""}`}
+                          className={`border-b border-r border-slate-200 px-3 py-2 align-top whitespace-normal ${numeric ? "tabular-nums" : ""} ${keyMetric ? "bg-cyan-50/70 font-bold text-cyan-900" : ""}`}
                           style={{ textAlign: align }}
                         >
                           {formatWorkbookCell(sheet, rowIndex, columnIndex, value)}

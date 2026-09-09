@@ -52,11 +52,10 @@ export const LIKERT_BANDS: LikertBand[] = [
 ]
 
 const DASH = "—"
-const SCALE_NOTE = "Likert scale: 5 = Strongly Agree, 4 = Agree, 3 = Neutral, 2 = Disagree, 1 = Strongly Disagree."
-const WEIGHTED_MEAN_NOTE = "Weighted Mean = Σfx / N. Values are rounded to 2 decimals for display only; intermediate values are not rounded."
-const SD_NOTE = "SD (sample, n−1)."
-const INTERPRETATION_NOTE = `Interpretation bands: ${LIKERT_BANDS.map((band) => `${band.meanRange} ${band.label}`).join("; ")}.`
-const COMPUTED_NOTES = [SCALE_NOTE, WEIGHTED_MEAN_NOTE, SD_NOTE, INTERPRETATION_NOTE]
+const SCALE_NOTE = "Scale: 5 = Strongly Agree · 4 = Agree · 3 = Neutral · 2 = Disagree · 1 = Strongly Disagree."
+const METHOD_NOTE = "Method: Weighted Mean = Σfx / N · SD uses the sample denominator (n−1) · display values are rounded to 2 decimals only."
+const INTERPRETATION_NOTE = `Interpretation: ${LIKERT_BANDS.map((band) => `${band.meanRange} ${band.label}`).join(" · ")}.`
+const COMPUTED_NOTES = [METHOD_NOTE, INTERPRETATION_NOTE]
 
 function displayNumber(value: number, count: number) {
   return count > 0 && Number.isFinite(value) ? value : DASH
@@ -131,26 +130,32 @@ function buildCover(input: StatisticsWorkbookInput): WorkbookSheet {
     : "All submitted responses"
 
   const rows: WorkbookCell[][] = [
-    ["Report", "Survey Statistical Tally & Descriptive Statistics"],
+    ["Report Information", ""],
     ["Survey", input.formTitle],
     ["Form Code", input.formCode],
     ["Response Source", input.responseSourceLabel],
     ["Date Range", dateRange],
+    ["Generated At", formatDate(input.generatedAt)],
+    ["", ""],
+    ["At a Glance", ""],
     ["Respondents", input.totalRespondentCount],
     ["Responses", input.totalResponseCount],
     ["Answers", input.summary.answerCount],
-    ["Generated At", formatDate(input.generatedAt)],
+    ["Overall Weighted Mean", displayNumber(input.summary.weightedMean, input.summary.count)],
+    ["Overall SD", displayNumber(input.summary.standardDeviation, input.summary.count)],
+    ["Overall Interpretation", interpretationForMean(input.summary.weightedMean, input.summary.count)],
     ["", ""],
-    ["Likert Value", "Label / Mean Range"],
+    ["Likert Scale Guide", ""],
+    ["Likert Value", "Interpretation / Mean Range"],
     ...LIKERT_BANDS.map((band) => [band.value, `${band.label} · ${band.meanRange}`]),
   ]
 
   return {
     name: "Cover",
-    title: "SurveyStat Statistical Report",
+    title: "SurveyStat · Statistical Report",
     columns: [
-      { header: "Report Detail", width: 22, align: "left" },
-      { header: "Value", width: 48, align: "left" },
+      { header: "Report Detail", width: 24, align: "left" },
+      { header: "Value", width: 44, align: "left" },
     ],
     rows,
     notes: [SCALE_NOTE, INTERPRETATION_NOTE],
@@ -252,7 +257,7 @@ function buildTally(input: StatisticsWorkbookInput): WorkbookSheet {
     interpretationForMean(grandMean, grandN),
   ])
 
-  rows.push(["Percentage Distribution", "", "% of each item N", "", "", "", "", "", "", "", "", "", "", ""])
+  rows.push(["Percentage Distribution · % of each item N", "", "", "", "", "", "", "", "", "", "", "", "", ""])
 
   input.itemStatistics.forEach((item) => {
     const percentage = (rating: 1 | 2 | 3 | 4 | 5) => item.count > 0
@@ -281,20 +286,20 @@ function buildTally(input: StatisticsWorkbookInput): WorkbookSheet {
     name: "Tally",
     title: `Frequency Distribution Tally · ${input.formTitle}`,
     columns: [
-      { header: "Section", width: 24 },
-      { header: "Item Code", width: 14, align: "center" },
-      { header: "Item Statement", width: 52 },
-      { header: "f(5) SA", width: 12, numFmt: "0", align: "right" },
-      { header: "f(4) A", width: 12, numFmt: "0", align: "right" },
-      { header: "f(3) N", width: 12, numFmt: "0", align: "right" },
-      { header: "f(2) D", width: 12, numFmt: "0", align: "right" },
-      { header: "f(1) SD", width: 12, numFmt: "0", align: "right" },
-      { header: "Total (N)", width: 12, numFmt: "0", align: "right" },
-      { header: "Σfx", width: 12, numFmt: "0", align: "right" },
-      { header: "Weighted Mean", width: 16, numFmt: "0.00", align: "right" },
-      { header: "SD", width: 12, numFmt: "0.00", align: "right" },
-      { header: "Rank", width: 10, numFmt: "0", align: "center" },
-      { header: "Verbal Interpretation", width: 24 },
+      { header: "Section", width: 20 },
+      { header: "Item Code", width: 12, align: "center" },
+      { header: "Item Statement", width: 44 },
+      { header: "f(5) SA", width: 10, numFmt: "0", align: "center" },
+      { header: "f(4) A", width: 10, numFmt: "0", align: "center" },
+      { header: "f(3) N", width: 10, numFmt: "0", align: "center" },
+      { header: "f(2) D", width: 10, numFmt: "0", align: "center" },
+      { header: "f(1) SD", width: 10, numFmt: "0", align: "center" },
+      { header: "Total (N)", width: 11, numFmt: "0", align: "right" },
+      { header: "Σfx", width: 11, numFmt: "0", align: "right" },
+      { header: "Weighted Mean", width: 14, numFmt: "0.00", align: "right" },
+      { header: "SD", width: 10, numFmt: "0.00", align: "right" },
+      { header: "Rank", width: 9, numFmt: "0", align: "center" },
+      { header: "Verbal Interpretation", width: 21 },
     ],
     rows,
     notes: [...COMPUTED_NOTES, "Percentage-distribution block expresses f(x) as % of each item N."],
@@ -312,15 +317,15 @@ function buildSectionSummary(input: StatisticsWorkbookInput): WorkbookSheet {
     name: "Section Summary",
     title: `Section Summary · ${input.formTitle}`,
     columns: [
-      { header: "Section", width: 30 },
-      { header: "Items", width: 12, numFmt: "0", align: "right" },
-      { header: "Answers (N)", width: 14, numFmt: "0", align: "right" },
-      { header: "Weighted Mean", width: 16, numFmt: "0.00", align: "right" },
-      { header: "SD", width: 12, numFmt: "0.00", align: "right" },
-      { header: "Variance", width: 12, numFmt: "0.00", align: "right" },
-      { header: "Mean Range", width: 14, align: "center" },
-      { header: "Interpretation", width: 24 },
-      { header: "Rank", width: 10, numFmt: "0", align: "center" },
+      { header: "Section", width: 22 },
+      { header: "Items", width: 10, numFmt: "0", align: "right" },
+      { header: "Answers (N)", width: 12, numFmt: "0", align: "right" },
+      { header: "Weighted Mean", width: 14, numFmt: "0.00", align: "right" },
+      { header: "SD", width: 10, numFmt: "0.00", align: "right" },
+      { header: "Variance", width: 11, numFmt: "0.00", align: "right" },
+      { header: "Mean Range", width: 13, align: "center" },
+      { header: "Interpretation", width: 21 },
+      { header: "Rank", width: 9, numFmt: "0", align: "center" },
     ],
     rows: input.sectionStatistics.map((section) => {
       const items = getSectionItems(section, input.itemStatistics)
@@ -345,19 +350,19 @@ function buildItemStatistics(input: StatisticsWorkbookInput): WorkbookSheet {
     name: "Item Statistics",
     title: `Item Descriptive Statistics · ${input.formTitle}`,
     columns: [
-      { header: "Section", width: 26 },
-      { header: "Item Code", width: 14, align: "center" },
-      { header: "Item Statement", width: 52 },
-      { header: "N", width: 10, numFmt: "0", align: "right" },
-      { header: "Mean", width: 12, numFmt: "0.00", align: "right" },
-      { header: "Weighted Mean", width: 16, numFmt: "0.00", align: "right" },
-      { header: "SD", width: 12, numFmt: "0.00", align: "right" },
-      { header: "Variance", width: 12, numFmt: "0.00", align: "right" },
-      { header: "Min", width: 10, numFmt: "0", align: "right" },
-      { header: "Max", width: 10, numFmt: "0", align: "right" },
+      { header: "Section", width: 22 },
+      { header: "Item Code", width: 12, align: "center" },
+      { header: "Item Statement", width: 44 },
+      { header: "N", width: 9, numFmt: "0", align: "right" },
+      { header: "Mean", width: 10, numFmt: "0.00", align: "right" },
+      { header: "Weighted Mean", width: 14, numFmt: "0.00", align: "right" },
+      { header: "SD", width: 10, numFmt: "0.00", align: "right" },
+      { header: "Variance", width: 11, numFmt: "0.00", align: "right" },
+      { header: "Min", width: 9, numFmt: "0", align: "right" },
+      { header: "Max", width: 9, numFmt: "0", align: "right" },
       { header: "Σx", width: 12, numFmt: "0", align: "right" },
-      { header: "Mean Range", width: 14, align: "center" },
-      { header: "Interpretation", width: 24 },
+      { header: "Mean Range", width: 13, align: "center" },
+      { header: "Interpretation", width: 21 },
     ],
     rows: input.itemStatistics.map((item) => [
       item.sectionTitle,
@@ -395,12 +400,12 @@ function buildSolution(input: StatisticsWorkbookInput): WorkbookSheet {
     name: "Solution",
     title: `Statistical Solution · ${input.formTitle}`,
     columns: [
-      { header: "Scope", width: 28 },
+      { header: "Scope", width: 24 },
       { header: "Step", width: 10, numFmt: "0", align: "center" },
-      { header: "Label", width: 26 },
-      { header: "Formula", width: 30 },
-      { header: "Substitution", width: 48 },
-      { header: "Result", width: 28 },
+      { header: "Label", width: 24 },
+      { header: "Formula", width: 26 },
+      { header: "Substitution", width: 40 },
+      { header: "Result", width: 24 },
     ],
     rows,
     notes: COMPUTED_NOTES,
@@ -430,11 +435,11 @@ function buildResponseSource(input: StatisticsWorkbookInput): WorkbookSheet {
     name: "Response Source",
     title: `Online vs Hardcopy Breakdown · ${input.formTitle}`,
     columns: [
-      { header: "Scope", width: 30 },
-      { header: "Online Responses", width: 18, numFmt: "0", align: "right" },
-      { header: "Hardcopy Responses", width: 20, numFmt: "0", align: "right" },
-      { header: "Online Answers", width: 18, numFmt: "0", align: "right" },
-      { header: "Hardcopy Answers", width: 20, numFmt: "0", align: "right" },
+      { header: "Scope", width: 26 },
+      { header: "Online Responses", width: 17, numFmt: "0", align: "right" },
+      { header: "Hardcopy Responses", width: 18, numFmt: "0", align: "right" },
+      { header: "Online Answers", width: 17, numFmt: "0", align: "right" },
+      { header: "Hardcopy Answers", width: 18, numFmt: "0", align: "right" },
     ],
     rows,
     notes: ["Response-source counts are taken from each statistics payload sourceBreakdown."],
@@ -446,17 +451,17 @@ function buildRawResponses(input: StatisticsWorkbookInput): WorkbookSheet {
     name: "Raw Responses",
     title: `Raw Response Register · ${input.formTitle}`,
     columns: [
-      { header: "Response ID", width: 36 },
+      { header: "Response ID", width: 30 },
       { header: "Submitted At", width: 22 },
-      { header: "Respondent", width: 28 },
-      { header: "Email", width: 30 },
-      { header: "Role", width: 22 },
-      { header: "Office", width: 24 },
-      { header: "Program", width: 24 },
+      { header: "Respondent", width: 24 },
+      { header: "Email", width: 28 },
+      { header: "Role", width: 18 },
+      { header: "Office", width: 20 },
+      { header: "Program", width: 20 },
       { header: "Answers", width: 12, numFmt: "0", align: "right" },
-      { header: "Weighted Mean", width: 16, numFmt: "0.00", align: "right" },
-      { header: "Mean Range", width: 14, align: "center" },
-      { header: "Interpretation", width: 24 },
+      { header: "Weighted Mean", width: 14, numFmt: "0.00", align: "right" },
+      { header: "Mean Range", width: 13, align: "center" },
+      { header: "Interpretation", width: 21 },
     ],
     rows: input.surveyResponses.map((response) => [
       response.id,
@@ -478,11 +483,11 @@ function buildRawResponses(input: StatisticsWorkbookInput): WorkbookSheet {
 export function buildStatisticsWorkbook(input: StatisticsWorkbookInput): WorkbookSheet[] {
   const sheets = [
     buildCover(input),
-    buildTally(input),
     buildSectionSummary(input),
+    buildTally(input),
     buildItemStatistics(input),
-    buildSolution(input),
     buildResponseSource(input),
+    buildSolution(input),
   ]
 
   if (input.surveyResponses.length > 0) {
